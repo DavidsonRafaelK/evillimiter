@@ -17,3 +17,6 @@ eggs/
 # Other
 _*
 TODO
+graphify-out/
+.venv/
+.idea/
