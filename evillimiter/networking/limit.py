@@ -47,11 +47,16 @@ class Limiter(object):
         host_ids = self._new_host_limit_ids(host, direction)
 
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            # drops forwarded packets with matching source
+            # drops forwarded packets with matching source (traffic routed
+            # through this machine, e.g. towards the internet)
             shell.execute_suppressed('{} -t filter -A FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            # drops packets the host sends directly to this machine
+            shell.execute_suppressed('{} -t filter -A INPUT -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             # drops forwarded packets with matching destination
             shell.execute_suppressed('{} -t filter -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            # drops packets this machine sends directly to the host
+            shell.execute_suppressed('{} -t filter -A OUTPUT -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
 
         host.blocked = True
 
@@ -145,9 +150,11 @@ class Limiter(object):
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
             shell.execute_suppressed('{} -t mangle -D POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
             shell.execute_suppressed('{} -t filter -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -t filter -D INPUT -s {} -j DROP'.format(BIN_IPTABLES, host.ip))
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             shell.execute_suppressed('{} -t mangle -D PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_))
             shell.execute_suppressed('{} -t filter -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
+            shell.execute_suppressed('{} -t filter -D OUTPUT -d {} -j DROP'.format(BIN_IPTABLES, host.ip))
 
 
 class Direction:
