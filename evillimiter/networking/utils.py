@@ -208,8 +208,8 @@ class ByteValue(object):
                     unit = 'tb'
                 
                 return '{}{}'.format(int(v), unit)
-            
-            if counter > 3:
+
+            if counter > 4:
                 raise Exception('Byte value limit exceeded')
 
     def __int__(self):
