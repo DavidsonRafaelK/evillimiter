@@ -1,4 +1,6 @@
 import re
+import socket
+import struct
 import netifaces
 from scapy.all import ARP, sr1 # pylint: disable=no-name-in-module
 
@@ -44,6 +46,66 @@ def get_mac_by_ip(interface, address):
 
     if response is not None:
         return response.hwsrc
+
+
+def get_hostname(ip):
+    """
+    Resolves the hostname of a device by its IP address.
+    Tries reverse DNS first, then falls back to a NetBIOS
+    node status query (works for most Windows/SMB devices on
+    a LAN where reverse DNS is unavailable).
+    """
+    try:
+        host_info = socket.gethostbyaddr(ip)
+        if host_info is not None and host_info[0]:
+            return host_info[0]
+    except (socket.herror, socket.gaierror, OSError):
+        pass
+
+    return get_netbios_name(ip)
+
+
+def get_netbios_name(ip, timeout=1):
+    """
+    Sends a NetBIOS node status request (NBSTAT) to UDP port 137
+    and parses the first non-group name from the response.
+    Returns the hostname or None on failure.
+    """
+    # NBSTAT query for the wildcard name '*'
+    query = struct.pack('>H', 0x0000)               # transaction id
+    query += struct.pack('>H', 0x0010)              # flags (broadcast)
+    query += struct.pack('>HHHH', 1, 0, 0, 0)       # qd, an, ns, ar counts
+    # encoded wildcard name '*' padded to 16 bytes
+    encoded = b'CKAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+    query += struct.pack('B', len(encoded)) + encoded + b'\x00'
+    query += struct.pack('>HH', 0x0021, 0x0001)     # type NBSTAT, class IN
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.sendto(query, (ip, 137))
+        data, _ = sock.recvfrom(1024)
+    except (socket.timeout, OSError):
+        return None
+    finally:
+        sock.close()
+
+    try:
+        # skip header (12) + question echo; number of names at fixed offset
+        names_offset = 56
+        num_names = data[names_offset]
+        offset = names_offset + 1
+        for _ in range(num_names):
+            name = data[offset:offset + 15].decode('ascii', 'ignore').strip()
+            flags = struct.unpack('>H', data[offset + 15:offset + 17])[0]
+            offset += 18
+            # bit 15 set => group name; skip groups, return first unique name
+            if not (flags & 0x8000) and name:
+                return name
+    except (IndexError, struct.error):
+        pass
+
+    return None
 
 
 def exists_interface(interface):

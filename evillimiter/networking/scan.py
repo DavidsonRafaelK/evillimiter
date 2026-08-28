@@ -1,11 +1,10 @@
-import sys
-import socket
 from tqdm import tqdm
 from netaddr import IPAddress
 from scapy.all import sr1, ARP # pylint: disable=no-name-in-module
 from concurrent.futures import ThreadPoolExecutor
 
 from .host import Host
+from . import utils
 from evillimiter.console.io import IO
         
 
@@ -34,12 +33,8 @@ class HostScanner(object):
             try:
                 for host in iterator:
                     if host is not None:
-                        try:
-                            host_info = socket.gethostbyaddr(host.ip)
-                            name = '' if host_info is None else host_info[0]
-                            host.name = name
-                        except socket.herror:
-                            pass
+                        name = utils.get_hostname(host.ip)
+                        host.name = '' if name is None else name
 
                         hosts.append(host)
             except KeyboardInterrupt:

@@ -1,8 +1,11 @@
+import socket
 import unittest
+from unittest import mock
 
 from evillimiter.networking.utils import (
     validate_ip_address,
     validate_mac_address,
+    get_hostname,
     ValueConverter,
     BitRate,
     ByteValue,
@@ -137,6 +140,27 @@ class ByteValueFromStringTest(unittest.TestCase):
     def test_invalid_unit_raises(self):
         with self.assertRaises(Exception):
             ByteValue.from_byte_string('6pb')
+
+
+class GetHostnameTest(unittest.TestCase):
+    @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
+    def test_returns_reverse_dns_name(self, gethostbyaddr):
+        gethostbyaddr.return_value = ('my-device.local', [], ['192.168.1.5'])
+        self.assertEqual(get_hostname('192.168.1.5'), 'my-device.local')
+
+    @mock.patch('evillimiter.networking.utils.get_netbios_name')
+    @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
+    def test_falls_back_to_netbios_on_reverse_dns_failure(self, gethostbyaddr, netbios):
+        gethostbyaddr.side_effect = socket.herror
+        netbios.return_value = 'WINPC'
+        self.assertEqual(get_hostname('192.168.1.5'), 'WINPC')
+
+    @mock.patch('evillimiter.networking.utils.get_netbios_name')
+    @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
+    def test_returns_none_when_all_fail(self, gethostbyaddr, netbios):
+        gethostbyaddr.side_effect = socket.herror
+        netbios.return_value = None
+        self.assertIsNone(get_hostname('192.168.1.5'))
 
 
 if __name__ == '__main__':
