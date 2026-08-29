@@ -52,7 +52,7 @@ DESCRIPTION = get_description()
 LONG_DESCRIPTION = get_long_description()
 LONG_DESCRIPTION_CONTENT_TYPE = 'text/markdown'
 KEYWORDS = ["evillimiter", "limit", "bandwidth", "network"]
-PACKAGES = find_packages()
+PACKAGES = find_packages(exclude=['tests', 'tests.*'])
 INCLUDE_PACKAGE_DATA = True
 
 CLASSIFIERS = ['Development Status :: 3 - Alpha',
