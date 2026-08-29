@@ -200,6 +200,7 @@ class MainMenu(CommandMenu):
         for host in hosts:
             self.arp_spoofer.add(host)
             self.ndp_spoofer.add(host)
+            self.host_watcher.add(host)
             self.limiter.limit(host, direction, rate)
             self.bandwidth_monitor.add(host)
 
@@ -219,6 +220,7 @@ class MainMenu(CommandMenu):
                     self.arp_spoofer.add(host)
 
                 self.ndp_spoofer.add(host)
+                self.host_watcher.add(host)
                 self.limiter.block(host, direction)
                 self.bandwidth_monitor.add(host)
                 IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
