@@ -70,7 +70,7 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
 | ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of limited host(s) (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval after bandwidth information get refreshed in milliseconds (default 500ms).<br>For example: ```monitor --interval 1000```
 | ```analyze [ID1,ID2,...] (--duration [time in s])``` | Analyzes traffic of host(s) without limiting to determine who uses how much bandwidth.<br>```--duration``` specifies the duration of the analysis in seconds (default 30s).<br>For example: ```analyze 2,3 --duration 120```
-| ```watch``` | Shows current watch status. The watch feature detects when a host reconnects with a different IP address.<br>Hosts are added to the watchlist automatically upon ```limit``` or ```block```.
+| ```watch``` | Shows current watch status, including each watched host's Online/Offline state as of the last scan sweep. The watch feature detects when a host reconnects with a different IP address.<br>Hosts are added to the watchlist automatically upon ```limit``` or ```block```.
 | ```watch add [ID1,ID2,...]``` | Adds specified host(s) to the watchlist.<br>For example: ```watch add 6,7,8```
 | ```watch remove [ID1,ID2,...]``` | Removes specified host(s) from the watchlist.<br>For example: ```watch remove all```
 | ```watch set [Attribute] [Value]``` | Changes current watch settings. The following attributes can be changed:<br>```range``` is the IP range to scan for reconnects.<br>```interval``` is the time to wait between each network scan (in seconds).<br>For example: ```watch set interval 120```
@@ -87,6 +87,10 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 - **Devices on a different subnet/VLAN are invisible.** Band-steering mesh systems that split 2.4GHz/5GHz onto separate subnets can let a host roam outside the scanned IP range entirely.
 - **A second network path bypasses it.** A device that also has Ethernet (mainly laptops, not phones) can switch to it and land on an untouched segment.
 - **Managed switches with Dynamic ARP Inspection can block the spoofing outright.** Irrelevant on typical home routers, matters on corporate/enterprise networks.
+
+## Contributing
+
+Want to report a bug, request a feature, or submit a pull request? See [CONTRIBUTING.md](CONTRIBUTING.md) for the rules on filing issues and opening PRs. Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Disclaimer
 [Evil Limiter](https://github.com/bitbrute/evillimiter) is provided by [bitbrute](https://github.com/bitbrute) "as is" and "with all faults". The provider makes no representations or warranties of any kind concerning the safety, suitability, lack of viruses, inaccuracies, typographical errors, or other harmful components of this software. There are inherent dangers in the use of any software, and you are solely responsible for determining whether Evil Limiter is compatible with your equipment and other software installed on your equipment. You are also solely responsible for the protection of your equipment and backup of your data, and the provider will not be liable for any damages you may suffer in connection with using, modifying, or distributing this software. 

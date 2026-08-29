@@ -12,7 +12,7 @@ from evillimiter.console.io import IO
 from evillimiter.console.chart import BarChart
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
-from evillimiter.networking.limit import Limiter, Direction
+from evillimiter.networking.limit import Limiter, Direction, LimitApplyError
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.ndp_spoof import NDPSpoofer
 from evillimiter.networking.scan import HostScanner
@@ -201,10 +201,15 @@ class MainMenu(CommandMenu):
             self.arp_spoofer.add(host)
             self.ndp_spoofer.add(host)
             self.host_watcher.add(host)
-            self.limiter.limit(host, direction, rate)
-            self.bandwidth_monitor.add(host)
 
-            IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
+            try:
+                self.limiter.limit(host, direction, rate)
+            except LimitApplyError as e:
+                IO.error('{}{}{r} {} limit only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+            else:
+                IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
+
+            self.bandwidth_monitor.add(host)
 
     def _block_handler(self, args):
         """
@@ -221,9 +226,15 @@ class MainMenu(CommandMenu):
 
                 self.ndp_spoofer.add(host)
                 self.host_watcher.add(host)
-                self.limiter.block(host, direction)
+
+                try:
+                    self.limiter.block(host, direction)
+                except LimitApplyError as e:
+                    IO.error('{}{}{r} {} block only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                else:
+                    IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
+
                 self.bandwidth_monitor.add(host)
-                IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
         """
@@ -429,7 +440,8 @@ class MainMenu(CommandMenu):
             watch_table_data = [[
                 '{}ID{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
                 '{}IP address{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
-                '{}MAC address{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
+                '{}MAC address{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL),
+                '{}Status{}'.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
             ]]
 
             set_table_data = [[
@@ -457,11 +469,19 @@ class MainMenu(CommandMenu):
                 '{}s'.format(interval)
             ])
 
+            absent_hosts = self.host_watcher.absent_hosts
+
             for host in self.host_watcher.hosts:
+                if host in absent_hosts:
+                    status = '{}Offline{}'.format(IO.Fore.LIGHTRED_EX, IO.Style.RESET_ALL)
+                else:
+                    status = '{}Online{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL)
+
                 watch_table_data.append([
                     '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, self._get_host_id(host), IO.Style.RESET_ALL),
                     host.ip,
-                    host.mac
+                    host.mac,
+                    status
                 ])
 
             for recon in self.host_watcher.log_list:
@@ -546,7 +566,13 @@ class MainMenu(CommandMenu):
         self.host_watcher.remove(old_host)
         self.host_watcher.add(new_host)
 
-        self.limiter.replace(old_host, new_host)
+        try:
+            self.limiter.replace(old_host, new_host)
+        except LimitApplyError as e:
+            IO.error('{}{}{r} reconnected as {}{}{r}, but restriction reapply only partially succeeded: {}.'.format(IO.Fore.LIGHTYELLOW_EX, old_host.ip, IO.Fore.LIGHTYELLOW_EX, new_host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+        else:
+            IO.ok('{}{}{r} reconnected as {}{}{r}, restriction reapplied.'.format(IO.Fore.LIGHTYELLOW_EX, old_host.ip, IO.Fore.LIGHTYELLOW_EX, new_host.ip, r=IO.Style.RESET_ALL))
+
         self.bandwidth_monitor.replace(old_host, new_host)
 
     def _clear_handler(self, args):
@@ -721,6 +747,15 @@ class MainMenu(CommandMenu):
         if host.spoofed:
             self.arp_spoofer.remove(host)
             self.ndp_spoofer.remove(host)
-            self.limiter.unlimit(host, Direction.BOTH)
+
+            try:
+                self.limiter.unlimit(host, Direction.BOTH)
+            except LimitApplyError as e:
+                # caught here (rather than left to propagate) since this
+                # helper also runs during rescan/shutdown cleanup, where
+                # a raised exception would skip the remaining teardown
+                # steps below for every other host, not just this one
+                IO.error('{}{}{r} restriction removal only partially succeeded: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+
             self.bandwidth_monitor.remove(host)
             self.host_watcher.remove(host)

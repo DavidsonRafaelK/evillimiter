@@ -46,7 +46,14 @@ class HostScanner(object):
 
             return hosts
 
-    def scan_for_reconnects(self, hosts, iprange=None):
+    def scan_for_reconnects(self, hosts, iprange=None, absent=None):
+        """
+        absent: optional set - if given, populated with every host from
+        `hosts` whose MAC address wasn't seen anywhere in this sweep
+        (offline this cycle). Reuses the sweep this method already does
+        instead of scanning twice; existing callers that don't pass it
+        see no change in behavior or return value.
+        """
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             scanned_hosts = []
             iprange = [str(x) for x in (self.iprange if iprange is None else iprange)]
@@ -56,11 +63,17 @@ class HostScanner(object):
 
             reconnected_hosts = {}
             for host in hosts:
+                seen = False
                 for s_host in scanned_hosts:
-                    if host.mac == s_host.mac and host.ip != s_host.ip:
+                    if host.mac == s_host.mac:
+                        seen = True
+                    if host.reconnected_as(s_host):
                         s_host.name = host.name
                         reconnected_hosts[host] = s_host
-            
+
+                if absent is not None and not seen:
+                    absent.add(host)
+
             return reconnected_hosts
 
     def _sweep(self, ip):

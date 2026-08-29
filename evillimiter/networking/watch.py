@@ -16,6 +16,11 @@ class HostWatcher(object):
         self._log_list = []
         self._log_list_lock = threading.Lock()
 
+        # watched hosts whose mac wasn't seen in the most recent watch
+        # sweep - offline, not to be confused with "reconnected"
+        self._absent_hosts = set()
+        self._absent_hosts_lock = threading.Lock()
+
         self._running = False
 
     @property
@@ -48,6 +53,11 @@ class HostWatcher(object):
         with self._log_list_lock:
             return self._log_list.copy()
 
+    @property
+    def absent_hosts(self):
+        with self._absent_hosts_lock:
+            return self._absent_hosts.copy()
+
     def add(self, host):
         with self._hosts_lock:
             self._hosts.add(host)
@@ -57,6 +67,9 @@ class HostWatcher(object):
     def remove(self, host):
         with self._hosts_lock:
             self._hosts.discard(host)
+
+        with self._absent_hosts_lock:
+            self._absent_hosts.discard(host)
 
         host.watched = False
 
@@ -76,10 +89,15 @@ class HostWatcher(object):
             self._hosts_lock.release()
 
             if len(hosts) > 0:
-                reconnected_hosts = self._scanner.scan_for_reconnects(hosts, self.iprange)
+                absent = set()
+                reconnected_hosts = self._scanner.scan_for_reconnects(hosts, self.iprange, absent=absent)
+
                 for old_host, new_host in reconnected_hosts.items():
                     self._reconnection_callback(old_host, new_host)
                     with self._log_list_lock:
                         self._log_list.append({ 'old': old_host, 'new': new_host, 'time': time.strftime('%Y-%m-%d %H:%M %p') })
+
+                with self._absent_hosts_lock:
+                    self._absent_hosts = absent
 
             time.sleep(self.interval)
