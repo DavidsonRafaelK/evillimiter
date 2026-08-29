@@ -42,7 +42,7 @@ def get_long_description():
         return f.read()
 
 
-NAME = 'evillimiter-ng'
+NAME = 'evillimiter-dk'
 AUTHOR = 'DavidsonRafaelK'
 AUTHOR_EMAIL = 'davidsonrafael20@gmail.com'
 LICENSE = 'MIT'
