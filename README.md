@@ -81,6 +81,12 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 ## Restrictions
 
 - **Rate-limits IPv4 traffic only**, since [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) requires the ARP packet that is only present on IPv4 networks. On networks with an IPv6 default route, a host's IPv6 traffic is instead fully blocked via NDP spoofing rather than rate-limited, since the ```tc```/```iptables``` rules that shape traffic are IPv4-only.
+- **Cellular fallback defeats it.** A blocked/limited phone can just switch to LTE/5G once WiFi degrades (Android "avoid poor connections", iOS equivalents) - that traffic never touches your network at all.
+- **MAC-randomizing devices reappear as a new host on reconnect.** Many phones present a different MAC per network join by default, so ```watch``` (matches by MAC) can't follow them; the old restriction is left bound to a MAC/IP nobody uses anymore.
+- **Already-open connections can straggle.** A stream/download in progress doesn't always re-resolve the gateway's address mid-flight, so it can keep flowing on a stale ARP/NDP cache entry until it naturally resets - new connections are caught immediately.
+- **Devices on a different subnet/VLAN are invisible.** Band-steering mesh systems that split 2.4GHz/5GHz onto separate subnets can let a host roam outside the scanned IP range entirely.
+- **A second network path bypasses it.** A device that also has Ethernet (mainly laptops, not phones) can switch to it and land on an untouched segment.
+- **Managed switches with Dynamic ARP Inspection can block the spoofing outright.** Irrelevant on typical home routers, matters on corporate/enterprise networks.
 
 ## Disclaimer
 [Evil Limiter](https://github.com/bitbrute/evillimiter) is provided by [bitbrute](https://github.com/bitbrute) "as is" and "with all faults". The provider makes no representations or warranties of any kind concerning the safety, suitability, lack of viruses, inaccuracies, typographical errors, or other harmful components of this software. There are inherent dangers in the use of any software, and you are solely responsible for determining whether Evil Limiter is compatible with your equipment and other software installed on your equipment. You are also solely responsible for the protection of your equipment and backup of your data, and the provider will not be liable for any damages you may suffer in connection with using, modifying, or distributing this software. 
