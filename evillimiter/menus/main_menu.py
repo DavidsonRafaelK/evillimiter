@@ -17,6 +17,7 @@ from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.scan import HostScanner
 from evillimiter.networking.monitor import BandwidthMonitor
 from evillimiter.networking.watch import HostWatcher
+from evillimiter.networking.dhcp_listener import DHCPHostnameListener
 
 
 class MainMenu(CommandMenu):
@@ -80,7 +81,8 @@ class MainMenu(CommandMenu):
         # range of IP address calculated from gateway IP and netmask
         self.iprange = list(netaddr.IPNetwork('{}/{}'.format(self.gateway_ip, self.netmask)))
 
-        self.host_scanner = HostScanner(self.interface, self.iprange)
+        self.dhcp_listener = DHCPHostnameListener(self.interface)
+        self.host_scanner = HostScanner(self.interface, self.iprange, self.dhcp_listener)
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.limiter = Limiter(self.interface)
         self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
@@ -98,6 +100,8 @@ class MainMenu(CommandMenu):
         self.bandwidth_monitor.start()
         # start the host watch thread
         self.host_watcher.start()
+        # start the dhcp hostname listener thread
+        self.dhcp_listener.start()
 
     def interrupt_handler(self, ctrl_c=True):
         if ctrl_c:
@@ -243,7 +247,7 @@ class MainMenu(CommandMenu):
                 IO.error('unable to resolve mac address. specify manually (--mac).')
                 return
 
-        name = netutils.get_hostname(ip)
+        name = self.dhcp_listener.get(mac) or netutils.get_hostname(ip)
 
         host = Host(ip, mac, name)
 

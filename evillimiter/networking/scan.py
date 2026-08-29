@@ -9,13 +9,14 @@ from evillimiter.console.io import IO
         
 
 class HostScanner(object):
-    def __init__(self, interface, iprange):
+    def __init__(self, interface, iprange, dhcp_listener=None):
         self.interface = interface
         self.iprange = iprange
+        self.dhcp_listener = dhcp_listener
 
-        self.max_workers = 75   # max. amount of threads
-        self.retries = 0        # ARP retry
-        self.timeout = 2.5      # time in s to wait for an answer
+        self.max_workers = 150  # max. amount of threads
+        self.retries = 1        # ARP retry
+        self.timeout = 1        # time in s to wait for an answer
 
     def scan(self, iprange=None):
         self._resolve_names = True
@@ -33,9 +34,11 @@ class HostScanner(object):
             try:
                 for host in iterator:
                     if host is not None:
-                        name = utils.get_hostname(host.ip)
-                        host.name = '' if name is None else name
+                        name = self.dhcp_listener.get(host.mac) if self.dhcp_listener else None
+                        if not name:
+                            name = utils.get_hostname(host.ip)
 
+                        host.name = '' if name is None else name
                         hosts.append(host)
             except KeyboardInterrupt:
                 iterator.close()

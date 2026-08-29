@@ -52,17 +52,22 @@ def get_hostname(ip):
     """
     Resolves the hostname of a device by its IP address.
     Tries reverse DNS first, then falls back to a NetBIOS
-    node status query (works for most Windows/SMB devices on
-    a LAN where reverse DNS is unavailable).
+    node status query (works for most Windows/SMB devices),
+    then to an mDNS PTR query (works for most Apple/Linux/IoT
+    devices advertising a '.local' name via Bonjour/Avahi).
     """
     try:
         host_info = socket.gethostbyaddr(ip)
-        if host_info is not None and host_info[0]:
+        if host_info is not None and host_info[0] and host_info[0] != ip:
             return host_info[0]
     except (socket.herror, socket.gaierror, OSError):
         pass
 
-    return get_netbios_name(ip)
+    name = get_netbios_name(ip)
+    if name:
+        return name
+
+    return get_mdns_name(ip)
 
 
 def get_netbios_name(ip, timeout=1):
@@ -106,6 +111,90 @@ def get_netbios_name(ip, timeout=1):
         pass
 
     return None
+
+
+def get_mdns_name(ip, timeout=1):
+    """
+    Sends a unicast mDNS PTR query for the reverse-IP name directly
+    to the host's port 5353 and parses the first PTR answer.
+    Resolves devices (Apple, Linux/Avahi, many IoT gadgets) that
+    advertise a '.local' name via mDNS but have no reverse DNS or
+    NetBIOS entry.
+    """
+    labels = list(reversed(ip.split('.'))) + ['in-addr', 'arpa']
+    qname = b''.join(struct.pack('B', len(l)) + l.encode('ascii') for l in labels) + b'\x00'
+
+    query = struct.pack('>HHHHHH', 0x0000, 0x0000, 1, 0, 0, 0)  # id, flags, qd/an/ns/ar counts
+    query += qname
+    query += struct.pack('>HH', 12, 1)  # QTYPE=PTR, QCLASS=IN
+
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.settimeout(timeout)
+    try:
+        sock.sendto(query, (ip, 5353))
+        data, _ = sock.recvfrom(1024)
+    except (socket.timeout, OSError):
+        return None
+    finally:
+        sock.close()
+
+    try:
+        ancount = struct.unpack('>H', data[6:8])[0]
+        if ancount == 0:
+            return None
+
+        offset = 12 + len(qname) + 4  # skip header + echoed question
+
+        for _ in range(ancount):
+            _, offset = _read_dns_name(data, offset)
+            rtype, _, _, rdlength = struct.unpack('>HHIH', data[offset:offset + 10])
+            offset += 10
+
+            if rtype == 12:  # PTR
+                name, _ = _read_dns_name(data, offset)
+                return name.rstrip('.') if name else None
+
+            offset += rdlength
+    except (IndexError, struct.error):
+        pass
+
+    return None
+
+
+def _read_dns_name(data, offset):
+    """
+    Reads a (possibly compressed, per RFC 1035 4.1.4) DNS name
+    starting at offset. Returns (name, offset_after_field), where
+    offset_after_field is the offset immediately following the
+    name/pointer as it appeared at the call site (i.e. not inside
+    a followed pointer's target).
+    """
+    labels = []
+    jumped = False
+    return_offset = offset
+
+    while True:
+        length = data[offset]
+
+        if length == 0:
+            offset += 1
+            if not jumped:
+                return_offset = offset
+            break
+
+        if (length & 0xC0) == 0xC0:
+            pointer = ((length & 0x3F) << 8) | data[offset + 1]
+            if not jumped:
+                return_offset = offset + 2
+            offset = pointer
+            jumped = True
+            continue
+
+        offset += 1
+        labels.append(data[offset:offset + length].decode('ascii', 'ignore'))
+        offset += length
+
+    return '.'.join(labels), return_offset
 
 
 def exists_interface(interface):

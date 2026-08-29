@@ -1,4 +1,5 @@
 import socket
+import struct
 import unittest
 from unittest import mock
 
@@ -6,6 +7,8 @@ from evillimiter.networking.utils import (
     validate_ip_address,
     validate_mac_address,
     get_hostname,
+    get_mdns_name,
+    _read_dns_name,
     ValueConverter,
     BitRate,
     ByteValue,
@@ -157,10 +160,81 @@ class GetHostnameTest(unittest.TestCase):
 
     @mock.patch('evillimiter.networking.utils.get_netbios_name')
     @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
-    def test_returns_none_when_all_fail(self, gethostbyaddr, netbios):
+    def test_ignores_reverse_dns_result_equal_to_ip(self, gethostbyaddr, netbios):
+        # some resolvers echo the queried ip back as the "hostname"
+        gethostbyaddr.return_value = ('192.168.1.5', [], ['192.168.1.5'])
+        netbios.return_value = 'WINPC'
+        self.assertEqual(get_hostname('192.168.1.5'), 'WINPC')
+
+    @mock.patch('evillimiter.networking.utils.get_mdns_name')
+    @mock.patch('evillimiter.networking.utils.get_netbios_name')
+    @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
+    def test_falls_back_to_mdns_when_netbios_fails(self, gethostbyaddr, netbios, mdns):
         gethostbyaddr.side_effect = socket.herror
         netbios.return_value = None
+        mdns.return_value = 'Android.local'
+        self.assertEqual(get_hostname('192.168.1.5'), 'Android.local')
+
+    @mock.patch('evillimiter.networking.utils.get_mdns_name')
+    @mock.patch('evillimiter.networking.utils.get_netbios_name')
+    @mock.patch('evillimiter.networking.utils.socket.gethostbyaddr')
+    def test_returns_none_when_all_fail(self, gethostbyaddr, netbios, mdns):
+        gethostbyaddr.side_effect = socket.herror
+        netbios.return_value = None
+        mdns.return_value = None
         self.assertIsNone(get_hostname('192.168.1.5'))
+
+
+class ReadDnsNameTest(unittest.TestCase):
+    def test_parses_uncompressed_name(self):
+        labels = [b'myphone', b'local']
+        data = b''.join(bytes([len(l)]) + l for l in labels) + b'\x00' + b'TRAILER'
+        name, offset = _read_dns_name(data, 0)
+        self.assertEqual(name, 'myphone.local')
+        self.assertEqual(offset, len(data) - len(b'TRAILER'))
+
+    def test_follows_compression_pointer(self):
+        # target name lives at offset 0, a pointer to it sits at offset 20
+        target = b'\x07myphone\x05local\x00'
+        pointer = b'\xc0\x00'
+        data = target + b'\x00\x00\x00\x00\x00' + pointer + b'REST'
+        pointer_offset = len(target) + 5
+        name, offset = _read_dns_name(data, pointer_offset)
+        self.assertEqual(name, 'myphone.local')
+        # offset advances past the 2-byte pointer at the call site, not into the jump target
+        self.assertEqual(offset, pointer_offset + 2)
+
+
+class GetMdnsNameTest(unittest.TestCase):
+    def _build_ptr_response(self, qname, hostname):
+        header = struct.pack('>HHHHHH', 0, 0x8400, 1, 1, 0, 0)
+        question = qname + struct.pack('>HH', 12, 1)
+        ans_name = b'\xc0\x0c'  # pointer back to the question name
+        rdata = b'\x07' + hostname.encode() + b'\x05local\x00'
+        answer = ans_name + struct.pack('>HHIH', 12, 1, 120, len(rdata)) + rdata
+        return header + question + answer
+
+    @mock.patch('evillimiter.networking.utils.socket.socket')
+    def test_parses_ptr_answer(self, socket_cls):
+        qlabels = ['5', '1', '168', '192', 'in-addr', 'arpa']
+        qname = b''.join(struct.pack('B', len(l)) + l.encode() for l in qlabels) + b'\x00'
+        response = self._build_ptr_response(qname, 'myphone')
+
+        sock = mock.Mock()
+        sock.recvfrom.return_value = (response, ('192.168.1.5', 5353))
+        socket_cls.return_value = sock
+
+        self.assertEqual(get_mdns_name('192.168.1.5'), 'myphone.local')
+        sock.sendto.assert_called_once()
+        self.assertEqual(sock.sendto.call_args[0][1], ('192.168.1.5', 5353))
+
+    @mock.patch('evillimiter.networking.utils.socket.socket')
+    def test_returns_none_on_timeout(self, socket_cls):
+        sock = mock.Mock()
+        sock.recvfrom.side_effect = socket.timeout
+        socket_cls.return_value = sock
+
+        self.assertIsNone(get_mdns_name('192.168.1.5'))
 
 
 if __name__ == '__main__':
