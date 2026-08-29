@@ -2,9 +2,20 @@ import os
 import configparser
 
 
-def _default_paths():
+def _config_dir():
     base = os.environ.get('XDG_CONFIG_HOME', os.path.expanduser('~/.config'))
-    return [os.path.join(base, 'evillimiter', 'config.ini')]
+    return os.path.join(base, 'evillimiter')
+
+
+def _default_paths():
+    return [os.path.join(_config_dir(), 'config.ini')]
+
+
+def history_file_path():
+    """
+    Path to the persisted shell command history file, alongside config.ini.
+    """
+    return os.path.join(_config_dir(), 'history')
 
 
 def load_config(paths=None):

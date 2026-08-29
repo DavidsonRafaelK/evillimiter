@@ -130,6 +130,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - Fixed a false-positive/duplicate-command bug in restriction teardown for combined upload+download limits/blocks
 - Fixed `ByteValue` formatting for totals in the terabyte range
 - CI running the test suite on every push/PR
+- Shell command history persisted across sessions (`~/.config/evillimiter/history`), navigable with ↑/↓
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

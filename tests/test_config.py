@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from evillimiter.common.config import load_config
+from evillimiter.common.config import load_config, history_file_path, _default_paths
 
 
 def _write(content):
@@ -81,6 +81,12 @@ class LoadConfigTest(unittest.TestCase):
             os.remove(path)
 
         self.assertNotIn('flush', config)
+
+
+class HistoryFilePathTest(unittest.TestCase):
+    def test_sits_alongside_config_file(self):
+        config_dir = os.path.dirname(_default_paths()[0])
+        self.assertEqual(history_file_path(), os.path.join(config_dir, 'history'))
 
 
 if __name__ == '__main__':

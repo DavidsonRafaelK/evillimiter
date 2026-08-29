@@ -1,5 +1,8 @@
 [ CHANGELOG ]
 
+[ Unreleased ]
+- Shell command history persisted across sessions, navigable with the arrow keys
+
 [ v1.6.0 ]
 - Added IPv6 (NDP) spoofing so limit/block also cover a host's IPv6 traffic, not just IPv4
 - Added optional config file (~/.config/evillimiter/config.ini) for default flags and watch settings
