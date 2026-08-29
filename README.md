@@ -25,8 +25,18 @@ Possibly missing python packages will be installed during the installation proce
 ```bash
 git clone https://github.com/bitbrute/evillimiter.git
 cd evillimiter
-sudo python3 setup.py install
+python3 -m venv .venv
+source .venv/bin/activate
+pip install .
 ```
+
+Run it with ```sudo``` (raw sockets, ```iptables```/```tc``` need root) - it's the run that needs root, not the install:
+
+```bash
+sudo .venv/bin/evillimiter
+```
+
+Note: ```sudo python3 setup.py install``` (the old instructions) is deprecated in modern setuptools and often fails outright with ```ModuleNotFoundError: No module named 'setuptools'``` - ```sudo``` runs the system Python, which usually doesn't have setuptools installed, unlike the venv's own Python that ```pip``` manages for you. On distros that enforce [PEP 668](https://peps.python.org/pep-0668/) (Arch, Debian 12+, ...), installing outside a venv is blocked entirely for this reason.
 
 Alternatively, you can download a desired version from the [Release page](https://github.com/bitbrute/evillimiter/releases).<br>
 
