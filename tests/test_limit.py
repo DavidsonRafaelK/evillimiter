@@ -243,5 +243,26 @@ class UnlimitTeardownAccuracyTest(unittest.TestCase):
         self.assertEqual(len(commands), 6)  # 2 tc + 2 tc + 2 mark, no duplicates
 
 
+class LimiterInfoTest(unittest.TestCase):
+    def setUp(self):
+        self.limiter = Limiter('eth0')
+        self.host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'victim')
+
+    def test_untracked_host_returns_none(self):
+        self.assertIsNone(self.limiter.info(self.host))
+
+    def test_limited_host_returns_rate_and_direction(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.OUTGOING, 1000)
+
+        self.assertEqual(self.limiter.info(self.host), (1000, Direction.OUTGOING))
+
+    def test_blocked_host_returns_no_rate(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.block(self.host, Direction.BOTH)
+
+        self.assertEqual(self.limiter.info(self.host), (None, Direction.BOTH))
+
+
 if __name__ == '__main__':
     unittest.main()

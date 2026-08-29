@@ -2,6 +2,7 @@
 
 [ Unreleased ]
 - Shell command history persisted across sessions, navigable with the arrow keys
+- `hosts` table now shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 
 [ v1.6.0 ]
 - Added IPv6 (NDP) spoofing so limit/block also cover a host's IPv6 traffic, not just IPv4

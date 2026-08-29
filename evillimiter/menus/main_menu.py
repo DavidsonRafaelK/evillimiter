@@ -177,7 +177,7 @@ class MainMenu(CommandMenu):
                     host.ip,
                     host.mac,
                     host.name,
-                    host.pretty_status()
+                    self._pretty_host_status(host)
                 ])
 
         table = SingleTable(table_data, 'Hosts')
@@ -189,6 +189,29 @@ class MainMenu(CommandMenu):
         IO.spacer()
         IO.print(table.table)
         IO.spacer()
+
+    def _pretty_host_status(self, host):
+        """
+        Host's Status column: appends the assigned rate/direction to
+        Limited/Blocked, instead of just the bare status word. `limiter`
+        is the source of truth for rate/direction (host only tracks the
+        limited/blocked flags), so it's asked directly rather than
+        duplicating that state onto Host.
+        """
+        status = host.pretty_status()
+        info = self.limiter.info(host)
+
+        if info is None:
+            return status
+
+        rate, direction = info
+        detail = str(rate) if rate is not None else None
+
+        if direction != Direction.BOTH:
+            direction_str = Direction.pretty_direction(direction)
+            detail = '{} {}'.format(detail, direction_str) if detail else direction_str
+
+        return '{} ({})'.format(status, detail) if detail else status
 
     def _limit_handler(self, args):
         """

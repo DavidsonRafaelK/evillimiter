@@ -131,6 +131,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - Fixed `ByteValue` formatting for totals in the terabyte range
 - CI running the test suite on every push/PR
 - Shell command history persisted across sessions (`~/.config/evillimiter/history`), navigable with ↑/↓
+- `hosts` table shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

@@ -6,6 +6,7 @@ import evillimiter.console.shell  # noqa: F401 - resolve circular import first
 from evillimiter.menus.main_menu import MainMenu
 from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Direction, LimitApplyError
+from evillimiter.networking.utils import BitRate
 
 
 def _mock_menu(hosts):
@@ -171,6 +172,53 @@ class FreeHostDiagnosticsTest(unittest.TestCase):
         self.assertIn('tc filter delete', io.error.call_args.args[0])
         menu.bandwidth_monitor.remove.assert_called_once_with(host)
         menu.host_watcher.remove.assert_called_once_with(host)
+
+
+class PrettyHostStatusTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: show details on the assigned
+    bandwidth limit in the hosts table, instead of just 'Limited'.
+    """
+    def setUp(self):
+        self.host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
+        self.menu = mock.Mock()
+
+    def test_free_host_shows_bare_status(self):
+        self.menu.limiter.info.return_value = None
+
+        self.assertEqual(MainMenu._pretty_host_status(self.menu, self.host), self.host.pretty_status())
+
+    def test_limited_both_directions_shows_rate_without_direction(self):
+        self.host.limited = True
+        self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH)
+
+        result = MainMenu._pretty_host_status(self.menu, self.host)
+
+        self.assertIn('1kbit', result)
+        self.assertNotIn('upload', result)
+        self.assertNotIn('download', result)
+
+    def test_limited_single_direction_shows_rate_and_direction(self):
+        self.host.limited = True
+        self.menu.limiter.info.return_value = (BitRate(1000), Direction.OUTGOING)
+
+        result = MainMenu._pretty_host_status(self.menu, self.host)
+
+        self.assertIn('1kbit upload', result)
+
+    def test_blocked_both_directions_shows_bare_status(self):
+        self.host.blocked = True
+        self.menu.limiter.info.return_value = (None, Direction.BOTH)
+
+        self.assertEqual(MainMenu._pretty_host_status(self.menu, self.host), self.host.pretty_status())
+
+    def test_blocked_single_direction_shows_direction(self):
+        self.host.blocked = True
+        self.menu.limiter.info.return_value = (None, Direction.INCOMING)
+
+        result = MainMenu._pretty_host_status(self.menu, self.host)
+
+        self.assertIn('download', result)
 
 
 if __name__ == '__main__':

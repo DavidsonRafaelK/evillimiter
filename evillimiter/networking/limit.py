@@ -33,6 +33,16 @@ class Limiter(object):
         self._host_dict = {}
         self._host_dict_lock = threading.Lock()
 
+    def info(self, host):
+        """
+        Returns (rate, direction) for a currently limited/blocked host,
+        or None if the host isn't tracked. rate is None for a blocked
+        host, since block() has no associated rate.
+        """
+        with self._host_dict_lock:
+            entry = self._host_dict.get(host)
+        return None if entry is None else (entry['rate'], entry['direction'])
+
     def limit(self, host, direction, rate):
         """
         Limits the uload/dload traffic of a host
