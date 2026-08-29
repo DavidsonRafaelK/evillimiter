@@ -38,8 +38,11 @@ class BandwidthMonitor(object):
     def replace(self, old_host, new_host):
         with self._host_result_lock:
             if old_host in self._host_result_dict:
-                self._host_result_dict[new_host] = self._host_result_dict[old_host]
-                del self._host_result_dict[old_host]
+                # pop-then-set (not a plain reassign) since old_host and
+                # new_host are the same reconnected device and therefore
+                # equal - a reassign under an equal key would just delete
+                # the entry it was meant to carry over
+                self._host_result_dict[new_host] = self._host_result_dict.pop(old_host)
 
     def start(self):
         if self._running:

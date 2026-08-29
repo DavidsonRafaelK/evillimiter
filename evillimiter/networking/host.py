@@ -12,10 +12,24 @@ class Host(object):
         self.watched = False
 
     def __eq__(self, other):
-        return self.ip == other.ip
+        return self.mac == other.mac
 
     def __hash__(self):
-        return hash((self.mac, self.ip))
+        return hash(self.mac)
+
+    def reconnected_as(self, other):
+        """
+        True if `other` is a fresh scan result for this same physical
+        device that has since moved to a different IP - the
+        "reconnect" case watch.py looks for. False for the same host
+        at an unchanged IP, and for any other/unrelated device.
+
+        MAC is the only signal trusted for identity, matching
+        __eq__/__hash__ above; a device that changes MAC (e.g. a
+        randomized-MAC network) is, by design, not recognized as the
+        same host reconnecting - see README Restrictions.
+        """
+        return self.mac == other.mac and self.ip != other.ip
 
     def pretty_status(self):
         if self.limited:

@@ -9,20 +9,65 @@ from evillimiter.networking.limit import Direction
 
 
 class HostEqualityTest(unittest.TestCase):
-    def test_equal_when_same_ip(self):
+    """
+    Identity is MAC-only: a device is the "same host" regardless of
+    which IP it currently holds, and two different devices are never
+    the same host even if one briefly reuses the other's old IP.
+    __eq__ and __hash__ must agree on this (Python's data model
+    requires equal objects to hash equally), so both key off mac.
+    """
+    def test_equal_when_same_mac_different_ip(self):
         a = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
-        b = Host('192.168.1.2', '11:22:33:44:55:66', 'b')
+        b = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'b')
         self.assertEqual(a, b)
 
-    def test_not_equal_when_different_ip(self):
+    def test_not_equal_when_different_mac(self):
         a = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
-        b = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', 'a')
+        b = Host('192.168.1.2', '11:22:33:44:55:66', 'a')
         self.assertNotEqual(a, b)
 
-    def test_hash_uses_mac_and_ip(self):
+    def test_hash_matches_eq_same_mac_different_ip(self):
         a = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
-        b = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'other')
+        b = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'other')
         self.assertEqual(hash(a), hash(b))
+
+    def test_hash_differs_for_different_mac(self):
+        a = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
+        b = Host('192.168.1.2', '11:22:33:44:55:66', 'a')
+        self.assertNotEqual(hash(a), hash(b))
+
+    def test_safe_as_set_member_across_reconnect(self):
+        # same physical device (mac unchanged) reconnecting with a new ip
+        # must be recognized as the same set member, not a duplicate
+        original = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
+        reconnected = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'a')
+
+        hosts = {original}
+        hosts.discard(original)
+        hosts.add(reconnected)
+
+        self.assertEqual(len(hosts), 1)
+        self.assertIn(reconnected, hosts)
+
+
+class HostReconnectedAsTest(unittest.TestCase):
+    def test_true_for_same_mac_different_ip(self):
+        original = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
+        rescanned = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', '')
+        self.assertTrue(original.reconnected_as(rescanned))
+
+    def test_false_for_same_mac_same_ip(self):
+        # host is just still there, unchanged - not a reconnect
+        original = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
+        rescanned = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', '')
+        self.assertFalse(original.reconnected_as(rescanned))
+
+    def test_false_for_different_mac_even_with_same_old_ip(self):
+        # a MAC-randomizing device (or a different device entirely) that
+        # happens to land on the old IP is not recognized as a reconnect
+        original = Host('192.168.1.2', 'aa:bb:cc:dd:ee:ff', 'a')
+        different_device = Host('192.168.1.2', '11:22:33:44:55:66', '')
+        self.assertFalse(original.reconnected_as(different_device))
 
 
 class HostStatusTest(unittest.TestCase):
