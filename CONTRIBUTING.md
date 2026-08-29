@@ -56,6 +56,9 @@ Do not open a public issue for a security vulnerability. Follow the reporting pr
    ```bash
    python3 -m unittest discover tests
    ```
+   CI runs this same command on every push/PR against `master` (Python
+   3.9 and 3.12) — a red check blocks review either way, so it's faster
+   to catch failures locally first.
 7. **Update documentation.** If your change adds/modifies a command, flag, or user-visible behavior, update `README.md` (and `CHANGELOG.md` if the project is tracking one for the next release).
 8. **Write a clear commit history.** Commit messages should explain *why*, not just *what*. Squash trivial fixup commits before opening the PR.
 9. **Open the PR against `master`** with:
