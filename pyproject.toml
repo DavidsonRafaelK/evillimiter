@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "evillimiter-dk"
+description = "Monitors, analyzes and limits the bandwidth of devices on the local network"
+dynamic = ["version"]
+readme = { file = "README.md", content-type = "text/markdown" }
+license = "MIT"
+authors = [
+    { name = "DavidsonRafaelK", email = "davidsonrafael20@gmail.com" },
+]
+keywords = ["evillimiter", "limit", "bandwidth", "network"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Operating System :: Unix",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: System :: Networking",
+]
+requires-python = ">=3"
+dependencies = [
+    "colorama",
+    "netaddr",
+    "netifaces",
+    "tqdm",
+    "scapy",
+    "terminaltables",
+]
+
+[project.urls]
+Homepage = "https://github.com/DavidsonRafaelK/evillimiter"
+
+[project.scripts]
+evillimiter = "evillimiter.evillimiter:run"
+
+[tool.setuptools.dynamic]
+version = { attr = "evillimiter.__version__" }
+
+[tool.setuptools.packages.find]
+exclude = ["tests", "tests.*"]
