@@ -1,5 +1,19 @@
 [ CHANGELOG ]
 
+[ v1.6.0 ]
+- Added IPv6 (NDP) spoofing so limit/block also cover a host's IPv6 traffic, not just IPv4
+- Added optional config file (~/.config/evillimiter/config.ini) for default flags and watch settings
+- Added -l/--log-file to persist ok/error messages to a file
+- Added --version flag
+- Added mDNS/NetBIOS/DHCP hostname fallback when reverse DNS fails
+- block now also blocks INPUT/OUTPUT chains (traffic to/from this machine itself), not just FORWARD
+- Fixed host tracking to key off MAC address instead of IP, fixing reconnect detection reliability and a hash/equality bug
+- Fixed limit/block to report tc/iptables failures instead of silently claiming success
+- Fixed a false-positive/duplicate-command bug in restriction teardown for combined upload+download limits/blocks
+- watch now shows each watched host's Online/Offline status and auto-watches hosts on limit/block
+- Fixed ByteValue formatting for totals in the terabyte range
+- Various install/build/documentation fixes (setup.py deprecation, CONTRIBUTING.md, updated Restrictions section)
+
 [ v1.5.0 ]
 - Added host bandwidth usage analysis without limiting (e.g.: analyze 2,3,4 --duration 120)
 - Added ability to detect host reconnections with different IP addresses (watch)
