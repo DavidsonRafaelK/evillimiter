@@ -51,6 +51,8 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 
 ```evillimiter``` will try to resolve required information (network interface, netmask, gateway address, ...) on its own, automatically.
 
+<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/screenshot.png" alt="evillimiter running in a terminal" width="800" /></p>
+
 #### Command-Line Arguments
 
 | Argument | Explanation |

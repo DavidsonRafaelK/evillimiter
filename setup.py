@@ -37,13 +37,20 @@ def get_description():
     raise RuntimeError('Unable to locate description string.')
 
 
-NAME = 'evillimiter'
+def get_long_description():
+    with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md'), 'r') as f:
+        return f.read()
+
+
+NAME = 'evillimiter-ng'
 AUTHOR = 'DavidsonRafaelK'
 AUTHOR_EMAIL = 'davidsonrafael20@gmail.com'
 LICENSE = 'MIT'
 VERSION = get_version()
 URL = 'https://github.com/DavidsonRafaelK/evillimiter'
 DESCRIPTION = get_description()
+LONG_DESCRIPTION = get_long_description()
+LONG_DESCRIPTION_CONTENT_TYPE = 'text/markdown'
 KEYWORDS = ["evillimiter", "limit", "bandwidth", "network"]
 PACKAGES = find_packages()
 INCLUDE_PACKAGE_DATA = True
@@ -79,6 +86,8 @@ setup(
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
     description=DESCRIPTION,
+    long_description=LONG_DESCRIPTION,
+    long_description_content_type=LONG_DESCRIPTION_CONTENT_TYPE,
     license=LICENSE,
     keywords=KEYWORDS,
     packages=PACKAGES,
