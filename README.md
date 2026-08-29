@@ -5,8 +5,9 @@
 [![License Badge](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Compatibility](https://img.shields.io/badge/python-3-brightgreen.svg)](PROJECT)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
-[![HitCount](http://hits.dwyl.io/bitbrute/evillimiter.svg)](http://hits.dwyl.io/bitbrute/evillimiter)
 [![Open Source Love](https://badges.frapsoft.com/os/v3/open-source.svg?v=102)](https://github.com/ellerbrock/open-source-badge/)
+
+> This project is a maintained fork of [bitbrute/evillimiter](https://github.com/bitbrute/evillimiter). The upstream repository is no longer maintained, so this fork continues development - bug fixes, new features, and compatibility updates. See [Fork-specific changes](#fork-specific-changes) below.
 
 A tool to monitor, analyze and limit the bandwidth (upload/download) of devices on your local network without physical or administrative access.<br>
 ```evillimiter``` employs [ARP spoofing](https://en.wikipedia.org/wiki/ARP_spoofing) and [traffic shaping](https://en.wikipedia.org/wiki/Traffic_shaping) to throttle the bandwidth of hosts on the network. On IPv6-enabled networks, [NDP spoofing](https://en.wikipedia.org/wiki/Address_Resolution_Protocol#Vulnerabilities) is used alongside ARP spoofing to also cut off a host's IPv6 traffic, which would otherwise bypass the IPv4-only limit/block.
@@ -27,7 +28,7 @@ Possibly missing python packages will be installed during the installation proce
 ## Installation
 
 ```bash
-git clone https://github.com/bitbrute/evillimiter.git
+git clone https://github.com/DavidsonRafaelK/evillimiter.git
 cd evillimiter
 python3 -m venv .venv
 source .venv/bin/activate
@@ -42,7 +43,7 @@ sudo .venv/bin/evillimiter
 
 Note: ```sudo python3 setup.py install``` (the old instructions) is deprecated in modern setuptools and often fails outright with ```ModuleNotFoundError: No module named 'setuptools'``` - ```sudo``` runs the system Python, which usually doesn't have setuptools installed, unlike the venv's own Python that ```pip``` manages for you. On distros that enforce [PEP 668](https://peps.python.org/pep-0668/) (Arch, Debian 12+, ...), installing outside a venv is blocked entirely for this reason.
 
-Alternatively, you can download a desired version from the [Release page](https://github.com/bitbrute/evillimiter/releases).<br>
+Alternatively, you can download a desired version from the [Release page](https://github.com/DavidsonRafaelK/evillimiter/releases).<br>
 
 ## Usage
 
@@ -111,14 +112,33 @@ range = 192.168.1.1-192.168.1.50
 - **A second network path bypasses it.** A device that also has Ethernet (mainly laptops, not phones) can switch to it and land on an untouched segment.
 - **Managed switches with Dynamic ARP Inspection can block the spoofing outright.** Irrelevant on typical home routers, matters on corporate/enterprise networks.
 
+## Fork-specific changes
+
+Everything below was added in this fork, on top of upstream's last release (v1.5.0):
+
+- IPv6 (NDP) spoofing, so `limit`/`block` also cover a host's IPv6 traffic instead of only IPv4
+- Optional config file (`~/.config/evillimiter/config.ini`) for default flags and watch settings
+- `-l`/`--log-file` to persist ok/error messages to a file
+- `--version` flag
+- mDNS/NetBIOS/DHCP hostname fallback when reverse DNS fails
+- `block` now also blocks the `INPUT`/`OUTPUT` chains (traffic to/from this machine itself), not just `FORWARD`
+- `watch` now shows each watched host's Online/Offline status and auto-watches hosts on `limit`/`block`
+- Host tracking keyed off MAC address instead of IP (fixes reconnect detection and a hash/equality bug)
+- `limit`/`block` report `tc`/`iptables` failures instead of silently claiming success
+- Fixed a false-positive/duplicate-command bug in restriction teardown for combined upload+download limits/blocks
+- Fixed `ByteValue` formatting for totals in the terabyte range
+- CI running the test suite on every push/PR
+
+See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
+
 ## Contributing
 
 Want to report a bug, request a feature, or submit a pull request? See [CONTRIBUTING.md](CONTRIBUTING.md) for the rules on filing issues and opening PRs. Please also read the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Disclaimer
-[Evil Limiter](https://github.com/bitbrute/evillimiter) is provided by [bitbrute](https://github.com/bitbrute) "as is" and "with all faults". The provider makes no representations or warranties of any kind concerning the safety, suitability, lack of viruses, inaccuracies, typographical errors, or other harmful components of this software. There are inherent dangers in the use of any software, and you are solely responsible for determining whether Evil Limiter is compatible with your equipment and other software installed on your equipment. You are also solely responsible for the protection of your equipment and backup of your data, and the provider will not be liable for any damages you may suffer in connection with using, modifying, or distributing this software. 
+[Evil Limiter](https://github.com/DavidsonRafaelK/evillimiter) - originally created by [bitbrute](https://github.com/bitbrute), now maintained by [DavidsonRafaelK](https://github.com/DavidsonRafaelK) - is provided "as is" and "with all faults". Neither the original author nor the current maintainer makes any representations or warranties of any kind concerning the safety, suitability, lack of viruses, inaccuracies, typographical errors, or other harmful components of this software. There are inherent dangers in the use of any software, and you are solely responsible for determining whether Evil Limiter is compatible with your equipment and other software installed on your equipment. You are also solely responsible for the protection of your equipment and backup of your data, and neither party will be liable for any damages you may suffer in connection with using, modifying, or distributing this software.
 
 ## License
 
-Copyright (c) 2019 by [bitbrute](https://github.com/bitbrute). Some rights reserved.<br>
-[Evil Limiter](https://github.com/bitbrute/evillimiter) is licensed under the MIT License as stated in the [LICENSE file](LICENSE).
+Copyright (c) 2019-2026 by [bitbrute](https://github.com/bitbrute), copyright (c) 2026 by [DavidsonRafaelK](https://github.com/DavidsonRafaelK) for fork-specific changes. Some rights reserved.<br>
+[Evil Limiter](https://github.com/DavidsonRafaelK/evillimiter) is licensed under the MIT License as stated in the [LICENSE file](LICENSE).

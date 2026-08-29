@@ -38,11 +38,11 @@ def get_description():
 
 
 NAME = 'evillimiter'
-AUTHOR = 'bitbrute'
-AUTHOR_EMAIL = 'bitbrute@gmail.com'
+AUTHOR = 'DavidsonRafaelK'
+AUTHOR_EMAIL = 'davidsonrafael20@gmail.com'
 LICENSE = 'MIT'
 VERSION = get_version()
-URL = 'https://github.com/bitbrute/evillimiter'
+URL = 'https://github.com/DavidsonRafaelK/evillimiter'
 DESCRIPTION = get_description()
 KEYWORDS = ["evillimiter", "limit", "bandwidth", "network"]
 PACKAGES = find_packages()

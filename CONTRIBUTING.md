@@ -14,7 +14,7 @@ By participating in this project you agree to follow the [Code of Conduct](CODE_
 
 ## Filing an issue
 
-Before opening a new issue, search existing [issues](https://github.com/bitbrute/evillimiter/issues) (open and closed) to avoid duplicates.
+Before opening a new issue, search existing [issues](https://github.com/DavidsonRafaelK/evillimiter/issues) (open and closed) to avoid duplicates.
 
 ### Bug reports
 
