@@ -22,7 +22,7 @@ from evillimiter.networking.dhcp_listener import DHCPHostnameListener
 
 
 class MainMenu(CommandMenu):
-    def __init__(self, version, interface, gateway_ip, gateway_mac, netmask):
+    def __init__(self, version, interface, gateway_ip, gateway_mac, netmask, watch_interval=None, watch_range=None):
         super().__init__()
         self.prompt = '({}Main{}) >>> '.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
         self.parser.add_subparser('clear', self._clear_handler)
@@ -89,6 +89,16 @@ class MainMenu(CommandMenu):
         self.limiter = Limiter(self.interface)
         self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
         self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
+
+        if watch_interval is not None:
+            self.host_watcher.interval = watch_interval
+
+        if watch_range is not None:
+            parsed_range = self._parse_iprange(watch_range)
+            if parsed_range is not None:
+                self.host_watcher.iprange = parsed_range
+            else:
+                IO.error('invalid watch range in config: {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, watch_range, IO.Style.RESET_ALL))
 
         # holds discovered hosts
         self.hosts = []

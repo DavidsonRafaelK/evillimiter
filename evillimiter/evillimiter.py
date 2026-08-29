@@ -9,9 +9,10 @@ import evillimiter.networking.utils as netutils
 from evillimiter.menus.main_menu import MainMenu
 from evillimiter.console.banner import get_main_banner
 from evillimiter.console.io import IO
+from evillimiter.common.config import load_config
 
 
-InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac')
+InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac, watch_interval, watch_range')
 
 
 def get_init_content():
@@ -48,15 +49,23 @@ def parse_arguments():
     Parses the main command-line arguments (sys.argv)
     using argparse
     """
-    parser = argparse.ArgumentParser(description=get_description())
-    parser.add_argument('-i', '--interface', help='network interface connected to the target network. automatically resolved if not specified.')
-    parser.add_argument('-g', '--gateway-ip', dest='gateway_ip', help='default gateway ip address. automatically resolved if not specified.')
-    parser.add_argument('-m', '--gateway-mac', dest='gateway_mac', help='gateway mac address. automatically resolved if not specified.')
-    parser.add_argument('-n', '--netmask', help='netmask for the network. automatically resolved if not specified.')
-    parser.add_argument('-f', '--flush', action='store_true', help='flush current iptables (firewall) and tc (traffic control) settings.')
-    parser.add_argument('--colorless', action='store_true', help='disable colored output.')
+    config = load_config()
 
-    return parser.parse_args()
+    parser = argparse.ArgumentParser(description=get_description())
+    parser.add_argument('-i', '--interface', default=config.get('interface'), help='network interface connected to the target network. automatically resolved if not specified.')
+    parser.add_argument('-g', '--gateway-ip', dest='gateway_ip', default=config.get('gateway_ip'), help='default gateway ip address. automatically resolved if not specified.')
+    parser.add_argument('-m', '--gateway-mac', dest='gateway_mac', default=config.get('gateway_mac'), help='gateway mac address. automatically resolved if not specified.')
+    parser.add_argument('-n', '--netmask', default=config.get('netmask'), help='netmask for the network. automatically resolved if not specified.')
+    parser.add_argument('-f', '--flush', action='store_true', help='flush current iptables (firewall) and tc (traffic control) settings.')
+    parser.add_argument('--colorless', action='store_true', default=config.get('colorless', False), help='disable colored output.')
+    parser.add_argument('-l', '--log-file', dest='log_file', default=config.get('log_file'), help='also write ok/error messages to this file.')
+    parser.add_argument('--version', action='version', version='evillimiter {}'.format(get_version()))
+
+    args = parser.parse_args()
+    args.watch_interval = config.get('watch_interval')
+    args.watch_range = config.get('watch_range')
+
+    return args
 
 
 def process_arguments(args):
@@ -117,7 +126,7 @@ def process_arguments(args):
         IO.spacer()
         IO.ok('flushed network settings')
 
-    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask)
+    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask, watch_interval=args.watch_interval, watch_range=args.watch_range)
 
 
 def initialize(interface):
@@ -152,7 +161,7 @@ def run():
     version = get_version()
     args = parse_arguments()
 
-    IO.initialize(args.colorless)
+    IO.initialize(args.colorless, args.log_file)
     IO.print(get_main_banner(version))
 
     if not is_linux():
@@ -169,8 +178,8 @@ def run():
         return
     
     if initialize(args.interface):
-        IO.spacer()        
-        menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask)
+        IO.spacer()
+        menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask, watch_interval=args.watch_interval, watch_range=args.watch_range)
         menu.start()
         cleanup(args.interface)
 

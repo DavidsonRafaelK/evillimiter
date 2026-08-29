@@ -20,6 +20,10 @@ Check out the open-source alternative [EvilLimiter for Windows](https://github.c
 
 Possibly missing python packages will be installed during the installation process.
 
+#### Compatibility notes
+
+```evillimiter``` locates ```tc```, ```iptables``` and ```sysctl``` via ```PATH``` at startup and errors clearly if one is missing. It shells out to the ```iptables``` binary specifically - on distros where ```iptables``` is an ```iptables-nft``` compatibility shim this generally works, but a firewall managed purely through native ```nft``` rules with no ```iptables``` shim installed is not something this tool talks to.
+
 ## Installation
 
 ```bash
@@ -57,6 +61,25 @@ Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 | ```-n [Netmask Address]``` | Specifies netmask (resolved if not specified)|
 | ```-f``` | Flushes current iptables and tc configuration. Ensures that packets are dealt with correctly.|
 | ```--colorless``` | Disables colored output |
+| ```-l [File Path]```, ```--log-file [File Path]``` | Also appends every ok/error message to this file (plain text, no color codes). |
+| ```--version``` | Prints the installed version and exits. |
+
+#### Config file
+
+Any of the flags above (except ```-f```/```--flush```, which is a one-shot action, not a persisted preference) can be given a default in an optional ini file at ```~/.config/evillimiter/config.ini``` (or ```$XDG_CONFIG_HOME/evillimiter/config.ini```). A command-line flag always overrides the config file.
+
+```ini
+[general]
+interface = wlan0
+colorless = true
+log_file = /var/log/evillimiter.log
+
+[watch]
+interval = 30
+range = 192.168.1.1-192.168.1.50
+```
+
+```[watch]``` sets the initial values normally set at runtime via ```watch set interval```/```watch set range``` (see below), so they don't need to be re-entered every session.
 
 #### ```evillimiter``` Commands
 
