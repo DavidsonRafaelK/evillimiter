@@ -88,7 +88,7 @@ range = 192.168.1.1-192.168.1.50
 
 | Command | Explanation |
 | ------- | ----------- |
-| ```scan (--range [IP Range])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
+| ```scan (--range [IP Range]) (--intensity [1,2,3])``` | Scans your network for online hosts. One of the first things to do after start.<br>```--range``` lets you specify a custom IP range.<br>```--intensity``` trades speed for thoroughness: ```1``` quick, ```2``` normal (default), ```3``` intense (more retries/longer timeout, useful on lossy networks). Sticky until changed again - also applies to `watch`'s background reconnect scans.<br>For example: ```scan --range 192.168.178.1-192.168.178.40``` or just ```scan``` to scan the entire subnet.
 | ```hosts (--force)``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.<br>```--force``` forces the table to be shown, even when it doesn't fit the terminal.
 | ```limit [ID1,ID2,...] [Rate] (--upload) (--download)``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed. Host(s) are automatically added to the watchlist.<br>```--upload``` limits outgoing traffic only.<br>```--download``` limits incoming traffic only.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit```
 | ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID. Host(s) are automatically added to the watchlist.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
@@ -132,6 +132,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - CI running the test suite on every push/PR
 - Shell command history persisted across sessions (`~/.config/evillimiter/history`), navigable with ↑/↓
 - `hosts` table shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
+- `scan --intensity [1,2,3]` to trade scan speed for thoroughness (quick/normal/intense)
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

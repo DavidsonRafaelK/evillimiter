@@ -2,7 +2,7 @@ import unittest
 from unittest import mock
 
 import evillimiter.console.shell  # noqa: F401 - resolve circular import first
-from evillimiter.networking.scan import HostScanner
+from evillimiter.networking.scan import HostScanner, ScanIntensity
 from evillimiter.networking.host import Host
 
 
@@ -122,6 +122,44 @@ class ScanForReconnectsTest(unittest.TestCase):
         scanner.scan_for_reconnects([tracked], iprange=['192.168.1.9'], absent=absent)
 
         self.assertEqual(absent, set())
+
+
+class ScanIntensityTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: custom scan speed/intensity for
+    quick or intensive scans. Requested but never shipped upstream.
+    """
+    def setUp(self):
+        self.scanner = HostScanner('eth0', [])
+
+    def test_defaults_to_normal_settings(self):
+        self.assertEqual(self.scanner.settings, self.scanner._normal_settings)
+
+    def test_set_intensity_quick(self):
+        self.scanner.set_intensity(ScanIntensity.QUICK)
+        self.assertEqual(self.scanner.settings, self.scanner._quick_settings)
+
+    def test_set_intensity_intense(self):
+        self.scanner.set_intensity(ScanIntensity.INTENSE)
+        self.assertEqual(self.scanner.settings, self.scanner._intense_settings)
+
+    def test_unknown_intensity_leaves_settings_unchanged(self):
+        self.scanner.set_intensity(999)
+        self.assertEqual(self.scanner.settings, self.scanner._normal_settings)
+
+    def test_normal_settings_match_pre_intensity_defaults(self):
+        # an untouched scanner must behave exactly as it did before
+        # intensity existed - no default behavior change
+        self.assertEqual(self.scanner.settings, HostScanner.Settings(max_workers=150, retries=1, timeout=1))
+
+    def test_sweep_uses_current_settings_for_retry_and_timeout(self):
+        self.scanner.set_intensity(ScanIntensity.INTENSE)
+
+        with mock.patch('evillimiter.networking.scan.sr1', return_value=None) as sr1_mock:
+            self.scanner._sweep('192.168.1.5')
+
+        self.assertEqual(sr1_mock.call_args.kwargs['retry'], self.scanner._intense_settings.retries)
+        self.assertEqual(sr1_mock.call_args.kwargs['timeout'], self.scanner._intense_settings.timeout)
 
 
 if __name__ == '__main__':

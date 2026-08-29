@@ -221,5 +221,55 @@ class PrettyHostStatusTest(unittest.TestCase):
         self.assertIn('download', result)
 
 
+class ScanHandlerIntensityTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: custom scan speed/intensity for
+    quick or intensive scans. Requested but never shipped upstream.
+    """
+    def setUp(self):
+        self.menu = mock.Mock()
+        self.menu.hosts_lock = threading.Lock()
+        self.menu.hosts = []
+        self.menu.host_scanner.scan.return_value = []
+
+    def test_valid_intensity_sets_scanner_intensity(self):
+        self.menu._parse_scan_intensity.return_value = 3
+        args = mock.Mock(iprange=None, intensity='3')
+
+        MainMenu._scan_handler(self.menu, args)
+
+        self.menu.host_scanner.set_intensity.assert_called_once_with(3)
+
+    def test_invalid_intensity_aborts_before_scanning(self):
+        self.menu._parse_scan_intensity.return_value = None
+        args = mock.Mock(iprange=None, intensity='9')
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._scan_handler(self.menu, args)
+
+        io.error.assert_called_once()
+        self.menu.host_scanner.set_intensity.assert_not_called()
+        self.menu.host_scanner.scan.assert_not_called()
+
+    def test_omitted_intensity_leaves_scanner_setting_untouched(self):
+        # sticky by design: also drives watch's background reconnect
+        # sweeps, which share this same scanner instance
+        args = mock.Mock(iprange=None, intensity=None)
+
+        MainMenu._scan_handler(self.menu, args)
+
+        self.menu.host_scanner.set_intensity.assert_not_called()
+
+
+class ParseScanIntensityTest(unittest.TestCase):
+    def test_accepts_1_2_3(self):
+        for value in ('1', '2', '3'):
+            self.assertEqual(MainMenu._parse_scan_intensity(mock.Mock(), value), int(value))
+
+    def test_rejects_out_of_range_or_non_numeric(self):
+        for value in ('0', '4', 'quick', ''):
+            self.assertIsNone(MainMenu._parse_scan_intensity(mock.Mock(), value))
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -15,7 +15,7 @@ from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Limiter, Direction, LimitApplyError
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.ndp_spoof import NDPSpoofer
-from evillimiter.networking.scan import HostScanner
+from evillimiter.networking.scan import HostScanner, ScanIntensity
 from evillimiter.networking.monitor import BandwidthMonitor
 from evillimiter.networking.watch import HostWatcher
 from evillimiter.networking.dhcp_listener import DHCPHostnameListener
@@ -32,6 +32,7 @@ class MainMenu(CommandMenu):
 
         scan_parser = self.parser.add_subparser('scan', self._scan_handler)
         scan_parser.add_parameterized_flag('--range', 'iprange')
+        scan_parser.add_parameterized_flag('--intensity', 'intensity')
 
         limit_parser = self.parser.add_subparser('limit', self._limit_handler)
         limit_parser.add_parameter('id')
@@ -142,6 +143,15 @@ class MainMenu(CommandMenu):
                 return
         else:
             iprange = None
+
+        if args.intensity:
+            intensity = self._parse_scan_intensity(args.intensity)
+            if intensity is None:
+                IO.error('invalid intensity level. must be 1 (quick), 2 (normal) or 3 (intense).')
+                return
+            # sticky: also affects watch's background reconnect sweeps,
+            # which share this same scanner, until changed again
+            self.host_scanner.set_intensity(intensity)
 
         with self.hosts_lock:
             for host in self.hosts:
@@ -627,10 +637,11 @@ class MainMenu(CommandMenu):
         IO.print(
             """
 {y}scan (--range [IP range]){r}{}scans for online hosts on your network.
-{s}required to find the hosts you want to limit.
+{y}     (--intensity [1,2,3]){r}{}required to find the hosts you want to limit.
 {b}{s}e.g.: scan
 {s}      scan --range 192.168.178.1-192.168.178.50
-{s}      scan --range 192.168.178.1/24{r}
+{s}      scan --range 192.168.178.1/24
+{s}      scan --intensity 3{r}
 
 {y}hosts (--force){r}{}lists all scanned hosts.
 {s}contains host information, including IDs.
@@ -673,6 +684,7 @@ class MainMenu(CommandMenu):
 {y}quit{r}{}quits the application.
             """.format(
                     spaces[len('scan (--range [IP range])'):],
+                    spaces[len('     (--intensity [1,2,3])'):],
                     spaces[len('hosts (--force)'):],
                     spaces[len('limit [ID1,ID2,...] [rate]'):],
                     spaces[len('      (--upload) (--download)'):],
@@ -772,6 +784,10 @@ class MainMenu(CommandMenu):
                 return list(netaddr.IPNetwork(range))
         except netaddr.core.AddrFormatError:
             return
+
+    def _parse_scan_intensity(self, value):
+        if value.isdigit() and int(value) in (ScanIntensity.QUICK, ScanIntensity.NORMAL, ScanIntensity.INTENSE):
+            return int(value)
 
     def _free_host(self, host):
         """
