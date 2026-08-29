@@ -31,6 +31,7 @@ class LoadConfigTest(unittest.TestCase):
             'gateway_mac = aa:bb:cc:dd:ee:ff\n'
             'netmask = 255.255.255.0\n'
             'colorless = true\n'
+            'auto_scan = true\n'
             'log_file = /tmp/evillimiter.log\n'
         )
         try:
@@ -44,8 +45,18 @@ class LoadConfigTest(unittest.TestCase):
             'gateway_mac': 'aa:bb:cc:dd:ee:ff',
             'netmask': '255.255.255.0',
             'colorless': True,
+            'auto_scan': True,
             'log_file': '/tmp/evillimiter.log',
         })
+
+    def test_auto_scan_absent_by_default(self):
+        path = _write('[general]\ninterface = wlan0\n')
+        try:
+            config = load_config(paths=[path])
+        finally:
+            os.remove(path)
+
+        self.assertNotIn('auto_scan', config)
 
     def test_reads_watch_section(self):
         path = _write(

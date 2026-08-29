@@ -20,7 +20,7 @@ from evillimiter.networking.dhcp_listener import DHCPHostnameListener
 
 
 class MainMenu(CommandMenu):
-    def __init__(self, version, interface, gateway_ip, gateway_mac, netmask, watch_interval=None, watch_range=None):
+    def __init__(self, version, interface, gateway_ip, gateway_mac, netmask, watch_interval=None, watch_range=None, auto_scan=False):
         super().__init__()
         self.prompt = '({}Main{}) >>> '.format(IO.Style.BRIGHT, IO.Style.RESET_ALL)
         self._build_parser()
@@ -68,6 +68,20 @@ class MainMenu(CommandMenu):
         self.host_watcher.start()
         # start the dhcp hostname listener thread
         self.dhcp_listener.start()
+
+        if auto_scan:
+            self._auto_scan()
+
+    def _auto_scan(self):
+        """
+        Runs `scan` then `hosts`, as if the user had just typed them -
+        opt-in via config (auto_scan under [general]), off by default
+        so a fresh install's first prompt is unchanged. Goes through
+        the parser (not the handlers directly) so it behaves exactly
+        like the real commands, defaults included.
+        """
+        self.parser.parse(['scan'])
+        self.parser.parse(['hosts'])
 
     def _build_parser(self):
         """

@@ -12,7 +12,7 @@ from evillimiter.console.io import IO
 from evillimiter.common.config import load_config
 
 
-InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac, watch_interval, watch_range')
+InitialArguments = collections.namedtuple('InitialArguments', 'interface, gateway_ip, netmask, gateway_mac, watch_interval, watch_range, auto_scan')
 
 
 def get_init_content():
@@ -64,6 +64,7 @@ def parse_arguments():
     args = parser.parse_args()
     args.watch_interval = config.get('watch_interval')
     args.watch_range = config.get('watch_range')
+    args.auto_scan = config.get('auto_scan', False)
 
     return args
 
@@ -126,7 +127,7 @@ def process_arguments(args):
         IO.spacer()
         IO.ok('flushed network settings')
 
-    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask, watch_interval=args.watch_interval, watch_range=args.watch_range)
+    return InitialArguments(interface=interface, gateway_ip=gateway_ip, gateway_mac=gateway_mac, netmask=netmask, watch_interval=args.watch_interval, watch_range=args.watch_range, auto_scan=args.auto_scan)
 
 
 def initialize(interface):
@@ -179,7 +180,7 @@ def run():
     
     if initialize(args.interface):
         IO.spacer()
-        menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask, watch_interval=args.watch_interval, watch_range=args.watch_range)
+        menu = MainMenu(version, args.interface, args.gateway_ip, args.gateway_mac, args.netmask, watch_interval=args.watch_interval, watch_range=args.watch_range, auto_scan=args.auto_scan)
         menu.start()
         cleanup(args.interface)
 

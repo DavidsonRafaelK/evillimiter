@@ -75,6 +75,7 @@ Any of the flags above (except ```-f```/```--flush```, which is a one-shot actio
 [general]
 interface = wlan0
 colorless = true
+auto_scan = true
 log_file = /var/log/evillimiter.log
 
 [watch]
@@ -83,6 +84,8 @@ range = 192.168.1.1-192.168.1.50
 ```
 
 ```[watch]``` sets the initial values normally set at runtime via ```watch set interval```/```watch set range``` (see below), so they don't need to be re-entered every session.
+
+```auto_scan``` (opt-in, off by default) runs ```scan``` then ```hosts``` automatically right after startup, so you don't have to type them every session.
 
 #### ```evillimiter``` Commands
 
@@ -133,6 +136,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - Shell command history persisted across sessions (`~/.config/evillimiter/history`), navigable with ↑/↓
 - `hosts` table shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 - `scan --intensity [1,2,3]` to trade scan speed for thoroughness (quick/normal/intense)
+- `auto_scan` config option to run `scan` then `hosts` automatically at startup
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

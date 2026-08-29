@@ -271,5 +271,20 @@ class ParseScanIntensityTest(unittest.TestCase):
             self.assertIsNone(MainMenu._parse_scan_intensity(mock.Mock(), value))
 
 
+class AutoScanTest(unittest.TestCase):
+    """
+    Upstream wishlist (bitbrute/evillimiter#63, comment by MR-Diamond):
+    auto-run `scan` then `hosts` at startup, opt-in via config.
+    """
+    def test_runs_scan_then_hosts_through_the_parser(self):
+        # goes through self.parser (not the handlers directly) so it
+        # behaves exactly like a typed command, defaults included
+        menu = mock.Mock()
+
+        MainMenu._auto_scan(menu)
+
+        menu.parser.parse.assert_has_calls([mock.call(['scan']), mock.call(['hosts'])])
+
+
 if __name__ == '__main__':
     unittest.main()

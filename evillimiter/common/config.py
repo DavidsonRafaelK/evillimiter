@@ -29,7 +29,7 @@ def load_config(paths=None):
 
     [general]
         interface, gateway_ip, gateway_mac, netmask, log_file - strings
-        colorless - bool
+        colorless, auto_scan - bool
     [watch]
         interval - int (seconds)
         range - string, same syntax as `watch set range` / -i CLI ranges
@@ -49,6 +49,8 @@ def load_config(paths=None):
                 values[key] = general[key]
         if 'colorless' in general:
             values['colorless'] = general.getboolean('colorless')
+        if 'auto_scan' in general:
+            values['auto_scan'] = general.getboolean('auto_scan')
 
     if parser.has_section('watch'):
         watch = parser['watch']
