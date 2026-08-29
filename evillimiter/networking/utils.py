@@ -26,6 +26,16 @@ def get_default_gateway():
         return gateways['default'][netifaces.AF_INET][0]
 
 
+def get_default_gateway_ipv6():
+    """
+    Returns the default IPv6 gateway address (usually link-local),
+    or None if the network has no IPv6 default route.
+    """
+    gateways = netifaces.gateways()
+    if 'default' in gateways and netifaces.AF_INET6 in gateways['default']:
+        return gateways['default'][netifaces.AF_INET6][0]
+
+
 def get_default_netmask(interface):
     """
     Returns the default IPv4 netmask associated to an interface 
@@ -33,6 +43,15 @@ def get_default_netmask(interface):
     ifaddrs = netifaces.ifaddresses(interface)
     if netifaces.AF_INET in ifaddrs:
         return ifaddrs[netifaces.AF_INET][0].get('netmask')
+
+
+def get_interface_mac(interface):
+    """
+    Returns the hardware (MAC) address of a local interface
+    """
+    ifaddrs = netifaces.ifaddresses(interface)
+    if netifaces.AF_LINK in ifaddrs:
+        return ifaddrs[netifaces.AF_LINK][0].get('addr')
 
 
 def get_mac_by_ip(interface, address):

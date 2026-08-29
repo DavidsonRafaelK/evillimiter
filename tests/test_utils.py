@@ -8,6 +8,8 @@ from evillimiter.networking.utils import (
     validate_mac_address,
     get_hostname,
     get_mdns_name,
+    get_default_gateway_ipv6,
+    get_interface_mac,
     _read_dns_name,
     ValueConverter,
     BitRate,
@@ -183,6 +185,28 @@ class GetHostnameTest(unittest.TestCase):
         netbios.return_value = None
         mdns.return_value = None
         self.assertIsNone(get_hostname('192.168.1.5'))
+
+
+class GetDefaultGatewayIpv6Test(unittest.TestCase):
+    @mock.patch('evillimiter.networking.utils.netifaces.gateways')
+    def test_returns_ipv6_gateway_when_present(self, gateways):
+        gateways.return_value = {'default': {2: ('192.168.1.1', 'eth0'), 10: ('fe80::1', 'eth0')}}
+        with mock.patch('evillimiter.networking.utils.netifaces.AF_INET6', 10):
+            self.assertEqual(get_default_gateway_ipv6(), 'fe80::1')
+
+    @mock.patch('evillimiter.networking.utils.netifaces.gateways')
+    def test_returns_none_without_ipv6_route(self, gateways):
+        gateways.return_value = {'default': {2: ('192.168.1.1', 'eth0')}}
+        with mock.patch('evillimiter.networking.utils.netifaces.AF_INET6', 10):
+            self.assertIsNone(get_default_gateway_ipv6())
+
+
+class GetInterfaceMacTest(unittest.TestCase):
+    @mock.patch('evillimiter.networking.utils.netifaces.ifaddresses')
+    def test_returns_mac_address(self, ifaddresses):
+        with mock.patch('evillimiter.networking.utils.netifaces.AF_LINK', 17):
+            ifaddresses.return_value = {17: [{'addr': 'aa:bb:cc:dd:ee:ff'}]}
+            self.assertEqual(get_interface_mac('eth0'), 'aa:bb:cc:dd:ee:ff')
 
 
 class ReadDnsNameTest(unittest.TestCase):

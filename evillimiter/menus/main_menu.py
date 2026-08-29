@@ -14,6 +14,7 @@ from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Limiter, Direction
 from evillimiter.networking.spoof import ARPSpoofer
+from evillimiter.networking.ndp_spoof import NDPSpoofer
 from evillimiter.networking.scan import HostScanner
 from evillimiter.networking.monitor import BandwidthMonitor
 from evillimiter.networking.watch import HostWatcher
@@ -84,6 +85,7 @@ class MainMenu(CommandMenu):
         self.dhcp_listener = DHCPHostnameListener(self.interface)
         self.host_scanner = HostScanner(self.interface, self.iprange, self.dhcp_listener)
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
+        self.ndp_spoofer = NDPSpoofer(self.interface, netutils.get_default_gateway_ipv6())
         self.limiter = Limiter(self.interface)
         self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
         self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
@@ -96,6 +98,8 @@ class MainMenu(CommandMenu):
 
         # start the spoof thread
         self.arp_spoofer.start()
+        # start the ipv6 (ndp) spoof thread
+        self.ndp_spoofer.start()
         # start the bandwidth monitor thread
         self.bandwidth_monitor.start()
         # start the host watch thread
@@ -110,6 +114,7 @@ class MainMenu(CommandMenu):
         IO.ok('cleaning up... stand by...')
 
         self.arp_spoofer.stop()
+        self.ndp_spoofer.stop()
         self.bandwidth_monitor.stop()
 
         for host in self.hosts:
@@ -194,6 +199,7 @@ class MainMenu(CommandMenu):
 
         for host in hosts:
             self.arp_spoofer.add(host)
+            self.ndp_spoofer.add(host)
             self.limiter.limit(host, direction, rate)
             self.bandwidth_monitor.add(host)
 
@@ -212,6 +218,7 @@ class MainMenu(CommandMenu):
                 if not host.spoofed:
                     self.arp_spoofer.add(host)
 
+                self.ndp_spoofer.add(host)
                 self.limiter.block(host, direction)
                 self.bandwidth_monitor.add(host)
                 IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
@@ -531,6 +538,8 @@ class MainMenu(CommandMenu):
 
         self.arp_spoofer.remove(old_host, restore=False)
         self.arp_spoofer.add(new_host)
+        self.ndp_spoofer.remove(old_host)
+        self.ndp_spoofer.add(new_host)
 
         self.host_watcher.remove(old_host)
         self.host_watcher.add(new_host)
@@ -709,6 +718,7 @@ class MainMenu(CommandMenu):
         """
         if host.spoofed:
             self.arp_spoofer.remove(host)
+            self.ndp_spoofer.remove(host)
             self.limiter.unlimit(host, Direction.BOTH)
             self.bandwidth_monitor.remove(host)
             self.host_watcher.remove(host)
