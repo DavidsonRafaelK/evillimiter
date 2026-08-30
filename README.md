@@ -1,11 +1,13 @@
-<p align="center"><img src="https://i.imgur.com/CBGh0Yx.png" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/logo.png" alt="Evil Limiter" width="500" /></p>
 
 # Evil Limiter
 
-[![License Badge](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Compatibility](https://img.shields.io/badge/python-3-brightgreen.svg)](PROJECT)
-[![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://GitHub.com/Naereen/StrapDown.js/graphs/commit-activity)
-[![Open Source Love](https://badges.frapsoft.com/os/v3/open-source.svg?v=102)](https://github.com/ellerbrock/open-source-badge/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.7+-brightgreen.svg)](pyproject.toml)
+[![CI](https://github.com/DavidsonRafaelK/evillimiter/actions/workflows/tests.yml/badge.svg)](https://github.com/DavidsonRafaelK/evillimiter/actions/workflows/tests.yml)
+[![Latest release](https://img.shields.io/github/v/release/DavidsonRafaelK/evillimiter)](https://github.com/DavidsonRafaelK/evillimiter/releases)
+[![Last commit](https://img.shields.io/github/last-commit/DavidsonRafaelK/evillimiter)](https://github.com/DavidsonRafaelK/evillimiter/commits/master)
+[![GitHub stars](https://img.shields.io/github/stars/DavidsonRafaelK/evillimiter)](https://github.com/DavidsonRafaelK/evillimiter/stargazers)
 
 > This project is a maintained fork of [bitbrute/evillimiter](https://github.com/bitbrute/evillimiter). The upstream repository is no longer maintained, so this fork continues development - bug fixes, new features, and compatibility updates. See [Fork-specific changes](#fork-specific-changes) below.
 
@@ -15,9 +17,20 @@ A tool to monitor, analyze and limit the bandwidth (upload/download) of devices 
 **Searching for a Windows-compatible version?**<br>
 Check out the open-source alternative [EvilLimiter for Windows](https://github.com/bitbrute/evillimiter-windows).
 
+> Only run this against a network you own or have written permission to test. ARP and NDP spoofing disrupts other people's traffic by design, and doing it to a network you don't control is illegal in most places.
+
+## Contents
+
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Restrictions](#restrictions)
+- [Fork-specific changes](#fork-specific-changes)
+- [Contributing](#contributing)
+
 ## Requirements
 - Linux distribution
-- Python 3 or greater
+- Python 3.7 or newer
 
 Possibly missing python packages will be installed during the installation process.
 
