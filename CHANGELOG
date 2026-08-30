@@ -1,6 +1,6 @@
 [ CHANGELOG ]
 
-[ Unreleased ]
+[ v1.7.0 ]
 - Shell command history persisted across sessions, navigable with the arrow keys
 - `hosts` table now shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 - Added `scan --intensity [1,2,3]` to trade scan speed for thoroughness (quick/normal/intense); also applies to watch's background reconnect scans
