@@ -97,7 +97,7 @@ range = 192.168.1.1-192.168.1.50
 | ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID. Host(s) are automatically added to the watchlist.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
-| ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of limited host(s) (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval after bandwidth information get refreshed in milliseconds (default 500ms).<br>For example: ```monitor --interval 1000```
+| ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of every discovered host, not just limited/blocked ones (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval after bandwidth information get refreshed in milliseconds (default 500ms).<br>For example: ```monitor --interval 1000```
 | ```analyze [ID1,ID2,...] (--duration [time in s])``` | Analyzes traffic of host(s) without limiting to determine who uses how much bandwidth.<br>```--duration``` specifies the duration of the analysis in seconds (default 30s).<br>For example: ```analyze 2,3 --duration 120```
 | ```watch``` | Shows current watch status, including each watched host's Online/Offline state as of the last scan sweep. The watch feature detects when a host reconnects with a different IP address.<br>Hosts are added to the watchlist automatically upon ```limit``` or ```block```.
 | ```watch add [ID1,ID2,...]``` | Adds specified host(s) to the watchlist.<br>For example: ```watch add 6,7,8```
@@ -137,6 +137,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - `hosts` table shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 - `scan --intensity [1,2,3]` to trade scan speed for thoroughness (quick/normal/intense)
 - `auto_scan` config option to run `scan` then `hosts` automatically at startup
+- `monitor` tracks every discovered host, not just limited/blocked ones
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

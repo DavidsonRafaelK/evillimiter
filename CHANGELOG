@@ -5,6 +5,7 @@
 - `hosts` table now shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"
 - Added `scan --intensity [1,2,3]` to trade scan speed for thoroughness (quick/normal/intense); also applies to watch's background reconnect scans
 - Added `auto_scan` config option (opt-in) to run `scan` then `hosts` automatically at startup
+- `monitor` now tracks bandwidth for every discovered host, not just limited/blocked ones
 
 [ v1.6.0 ]
 - Added IPv6 (NDP) spoofing so limit/block also cover a host's IPv6 traffic, not just IPv4

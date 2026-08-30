@@ -239,7 +239,7 @@ def print_help():
 {b}{s}e.g.: add 192.168.178.24
 {s}      add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37{r}
 
-{y}monitor (--interval [time in ms]){r}{}monitors bandwidth usage of limited host(s).
+{y}monitor (--interval [time in ms]){r}{}monitors bandwidth usage of every discovered host.
 {b}{s}e.g.: monitor --interval 600{r}
 
 {y}analyze [ID1,ID2,...]{r}{}analyzes traffic of host(s) without limiting

@@ -271,6 +271,39 @@ class ParseScanIntensityTest(unittest.TestCase):
             self.assertIsNone(MainMenu._parse_scan_intensity(mock.Mock(), value))
 
 
+class MonitorHandlerTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: monitor every host in real-time,
+    instead of just the hosts that are already limited.
+    """
+    def setUp(self):
+        self.menu = mock.Mock()
+        self.host1 = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', 'phone')
+        self.host2 = Host('192.168.1.4', '11:22:33:44:55:66', 'laptop')
+        self.menu.hosts = [self.host1, self.host2]
+        self.menu.hosts_lock = threading.Lock()
+
+    def test_adds_every_discovered_host_not_just_limited(self):
+        self.menu.bandwidth_monitor.get.return_value = None  # nothing tracked yet -> error path, no curses
+        args = mock.Mock(interval=None)
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._monitor_handler(self.menu, args)
+
+        self.menu.bandwidth_monitor.add.assert_has_calls([mock.call(self.host1), mock.call(self.host2)], any_order=True)
+        io.error.assert_called_once()
+
+    def test_invalid_interval_errors_before_opening_curses(self):
+        args = mock.Mock(interval='not-a-number')
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io, \
+             mock.patch('evillimiter.menus.main_menu.curses') as curses_mock:
+            MainMenu._monitor_handler(self.menu, args)
+
+        io.error.assert_called_once()
+        curses_mock.wrapper.assert_not_called()
+
+
 class AutoScanTest(unittest.TestCase):
     """
     Upstream wishlist (bitbrute/evillimiter#63, comment by MR-Diamond):

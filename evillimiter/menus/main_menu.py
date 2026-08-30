@@ -332,8 +332,14 @@ class MainMenu(CommandMenu):
     def _monitor_handler(self, args):
         """
         Handles 'monitor' command-line argument
-        Monitors hosts bandwidth usage
+        Monitors bandwidth usage of every discovered host, not just
+        limited/blocked ones - add() is idempotent, so this is a no-op
+        for hosts already tracked via limit/block/analyze.
         """
+        with self.hosts_lock:
+            for host in self.hosts:
+                self.bandwidth_monitor.add(host)
+
         def get_bandwidth_results():
             with self.hosts_lock:
                 return [x for x in [(y, self.bandwidth_monitor.get(y)) for y in self.hosts] if x[1] is not None]
