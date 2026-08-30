@@ -37,7 +37,9 @@ class Limiter(object):
         """
         Returns (rate, direction) for a currently limited/blocked host,
         or None if the host isn't tracked. rate is None for a blocked
-        host, since block() has no associated rate.
+        host (block() has no associated rate), a single BitRate for a
+        uniformly-limited host, or an (upload_rate, download_rate)
+        tuple for independent rates.
         """
         with self._host_dict_lock:
             entry = self._host_dict.get(host)
@@ -45,14 +47,22 @@ class Limiter(object):
 
     def limit(self, host, direction, rate):
         """
-        Limits the uload/dload traffic of a host
-        to a specified rate
+        Limits the uload/dload traffic of a host to a specified rate.
+
+        `rate` is either a single BitRate applied to every direction in
+        `direction`, or an (upload_rate, download_rate) tuple for
+        independent rates - only meaningful (and only used) when
+        `direction` is BOTH. Stored as-is in _host_dict, so info() and
+        replace() hand the same shape straight back without needing to
+        know which case they're in.
         """
+        upload_rate, download_rate = rate if isinstance(rate, tuple) else (rate, rate)
+
         host_ids, failed_steps = self._new_host_limit_ids(host, direction)
 
         if (direction & Direction.OUTGOING) == Direction.OUTGOING:
             # add a class to the root qdisc with specified rate
-            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.upload_id, r=rate, b=rate * 1.1)):
+            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.upload_id, r=upload_rate, b=upload_rate * 1.1)):
                 failed_steps.append('tc class (upload)')
             # add a fw filter that filters packets marked with the corresponding ID
             if not self._run('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.upload_id)):
@@ -62,7 +72,7 @@ class Limiter(object):
                 failed_steps.append('iptables mark (upload)')
         if (direction & Direction.INCOMING) == Direction.INCOMING:
             # add a class to the root qdisc with specified rate
-            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.download_id, r=rate, b=rate * 1.1)):
+            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.download_id, r=download_rate, b=download_rate * 1.1)):
                 failed_steps.append('tc class (download)')
             # add a fw filter that filters packets marked with the corresponding ID
             if not self._run('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.download_id)):

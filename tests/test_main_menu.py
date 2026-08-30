@@ -18,6 +18,10 @@ def _mock_menu(hosts):
     menu = mock.Mock()
     menu._get_hosts_by_ids.return_value = hosts
     menu._parse_direction_args.return_value = Direction.BOTH
+    # pure (ignore menu state) - delegate to the real implementation so
+    # limit-handler tests still exercise real rate parsing/formatting
+    menu._parse_rate_args.side_effect = lambda rate_string, direction: MainMenu._parse_rate_args(menu, rate_string, direction)
+    menu._pretty_rate.side_effect = lambda rate: MainMenu._pretty_rate(menu, rate)
     return menu
 
 
@@ -182,6 +186,10 @@ class PrettyHostStatusTest(unittest.TestCase):
     def setUp(self):
         self.host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
         self.menu = mock.Mock()
+        # _pretty_rate is pure (ignores menu state) - use the real
+        # implementation instead of stubbing a return value, so these
+        # tests still catch a broken formatter
+        self.menu._pretty_rate.side_effect = lambda rate: MainMenu._pretty_rate(self.menu, rate)
 
     def test_free_host_shows_bare_status(self):
         self.menu.limiter.info.return_value = None
@@ -269,6 +277,88 @@ class ParseScanIntensityTest(unittest.TestCase):
     def test_rejects_out_of_range_or_non_numeric(self):
         for value in ('0', '4', 'quick', ''):
             self.assertIsNone(MainMenu._parse_scan_intensity(mock.Mock(), value))
+
+
+class ParseRateArgsTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist comment (andrewprivate): set
+    different upload/download rates on the same device in one call.
+    """
+    def test_single_rate_returns_bitrate(self):
+        rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit', Direction.BOTH)
+        self.assertIsInstance(rate, BitRate)
+        self.assertEqual(rate.rate, 200000)
+
+    def test_single_rate_valid_for_a_single_direction_too(self):
+        rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit', Direction.OUTGOING)
+        self.assertIsInstance(rate, BitRate)
+        self.assertEqual(rate.rate, 200000)
+
+    def test_invalid_single_rate_reports_error_and_returns_none(self):
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            rate = MainMenu._parse_rate_args(mock.Mock(), 'notarate', Direction.BOTH)
+
+        self.assertIsNone(rate)
+        io.error.assert_called_once()
+
+    def test_compound_rate_with_both_directions_returns_tuple(self):
+        rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit/1mbit', Direction.BOTH)
+        self.assertEqual((rate[0].rate, rate[1].rate), (200000, 1000000))
+
+    def test_compound_rate_with_single_direction_is_rejected(self):
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit/1mbit', Direction.OUTGOING)
+
+        self.assertIsNone(rate)
+        io.error.assert_called_once()
+
+    def test_compound_rate_with_wrong_part_count_is_rejected(self):
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit/1mbit/1gbit', Direction.BOTH)
+
+        self.assertIsNone(rate)
+        io.error.assert_called_once()
+
+    def test_compound_rate_with_invalid_segment_is_rejected(self):
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            rate = MainMenu._parse_rate_args(mock.Mock(), '200kbit/notarate', Direction.BOTH)
+
+        self.assertIsNone(rate)
+        io.error.assert_called_once()
+
+
+class PrettyRateTest(unittest.TestCase):
+    def test_single_rate_formats_plainly(self):
+        self.assertEqual(MainMenu._pretty_rate(mock.Mock(), BitRate.from_rate_string('200kbit')), '200kbit')
+
+    def test_tuple_rate_formats_with_arrows(self):
+        rate = (BitRate.from_rate_string('200kbit'), BitRate.from_rate_string('1mbit'))
+        self.assertEqual(MainMenu._pretty_rate(mock.Mock(), rate), '200kbit↑ 1mbit↓')
+
+
+class LimitHandlerIndependentRateTest(unittest.TestCase):
+    def test_compound_rate_applies_tuple_to_limiter(self):
+        host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
+        menu = _mock_menu([host])
+        args = mock.Mock(id='0', rate='200kbit/1mbit')
+
+        MainMenu._limit_handler(menu, args)
+
+        called_host, called_direction, called_rate = menu.limiter.limit.call_args.args
+        self.assertEqual(called_host, host)
+        self.assertEqual(called_direction, Direction.BOTH)
+        self.assertEqual((called_rate[0].rate, called_rate[1].rate), (200000, 1000000))
+
+    def test_invalid_compound_rate_aborts_before_touching_any_host(self):
+        host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
+        menu = _mock_menu([host])
+        args = mock.Mock(id='0', rate='200kbit/notarate')
+
+        with mock.patch('evillimiter.menus.main_menu.IO'):
+            MainMenu._limit_handler(menu, args)
+
+        menu.limiter.limit.assert_not_called()
+        menu.arp_spoofer.add.assert_not_called()
 
 
 class MonitorHandlerTest(unittest.TestCase):

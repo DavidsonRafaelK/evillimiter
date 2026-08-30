@@ -6,6 +6,7 @@ from unittest import mock
 import evillimiter.console.shell  # noqa: F401
 from evillimiter.networking.host import Host
 from evillimiter.networking.limit import Limiter, Direction, LimitApplyError
+from evillimiter.networking.utils import BitRate
 
 
 def _capture_commands(limiter_call):
@@ -241,6 +242,58 @@ class UnlimitTeardownAccuracyTest(unittest.TestCase):
             1,
         )
         self.assertEqual(len(commands), 6)  # 2 tc + 2 tc + 2 mark, no duplicates
+
+
+class IndependentRateTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist comment (andrewprivate): set
+    different upload/download rates on the same device in one call,
+    instead of one rate applying to both directions.
+    """
+    def setUp(self):
+        self.limiter = Limiter('eth0')
+        self.host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'victim')
+
+    def test_tuple_rate_uses_distinct_upload_and_download_rates(self):
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.limit(self.host, Direction.BOTH, (BitRate(1000), BitRate(500000)))
+        ))
+        self.assertIn('htb rate 1kbit', cmds)
+        self.assertIn('htb rate 500kbit', cmds)
+
+    def test_info_returns_the_rate_tuple_unchanged(self):
+        rate = (BitRate(1000), BitRate(500000))
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, rate)
+
+        self.assertEqual(self.limiter.info(self.host), (rate, Direction.BOTH))
+
+    def test_unlimit_tears_down_both_directions(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, (BitRate(1000), BitRate(500000)))
+
+        ids = self.limiter._host_dict[self.host]['ids']
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.unlimit(self.host, Direction.BOTH)
+        ))
+        self.assertIn('classid 1:{}'.format(ids.upload_id), cmds)
+        self.assertIn('classid 1:{}'.format(ids.download_id), cmds)
+        self.assertFalse(self.host.limited)
+
+    def test_replace_carries_the_rate_tuple_through_reconnect(self):
+        old_host = self.host
+        new_host = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'victim')
+        rate = (BitRate(1000), BitRate(500000))
+
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(old_host, Direction.BOTH, rate)
+
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.replace(old_host, new_host)
+        ))
+        self.assertIn('htb rate 1kbit', cmds)
+        self.assertIn('htb rate 500kbit', cmds)
+        self.assertEqual(self.limiter.info(new_host), (rate, Direction.BOTH))
 
 
 class LimiterInfoTest(unittest.TestCase):

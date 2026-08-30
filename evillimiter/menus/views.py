@@ -222,9 +222,11 @@ def print_help():
 {s}contains host information, including IDs.
 
 {y}limit [ID1,ID2,...] [rate]{r}{}limits bandwith of host(s) (uload/dload).
-{y}      (--upload) (--download){r}{}{b}e.g.: limit 4 100kbit
+{y}      (--upload) (--download){r}{}rate may be 'up/down' for independent rates (both directions only).
+{b}{s}e.g.: limit 4 100kbit
 {s}      limit 2,3,4 1gbit --download
-{s}      limit all 200kbit --upload{r}
+{s}      limit all 200kbit --upload
+{s}      limit 4 200kbit/1mbit{r}
 
 {y}block [ID1,ID2,...]{r}{}blocks internet access of host(s).
 {y}      (--upload) (--download){r}{}{b}e.g.: block 3,2

@@ -221,7 +221,7 @@ class MainMenu(CommandMenu):
             return status
 
         rate, direction = info
-        detail = str(rate) if rate is not None else None
+        detail = self._pretty_rate(rate) if rate is not None else None
 
         if direction != Direction.BOTH:
             direction_str = Direction.pretty_direction(direction)
@@ -238,13 +238,11 @@ class MainMenu(CommandMenu):
         if hosts is None or len(hosts) == 0:
             return
 
-        try:
-            rate = BitRate.from_rate_string(args.rate)
-        except Exception:
-            IO.error('limit rate is invalid.')
-            return
-
         direction = self._parse_direction_args(args)
+
+        rate = self._parse_rate_args(args.rate, direction)
+        if rate is None:
+            return
 
         for host in hosts:
             self.arp_spoofer.add(host)
@@ -256,7 +254,7 @@ class MainMenu(CommandMenu):
             except LimitApplyError as e:
                 IO.error('{}{}{r} {} limit only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
             else:
-                IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, rate, r=IO.Style.RESET_ALL))
+                IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, self._pretty_rate(rate), r=IO.Style.RESET_ALL))
 
             self.bandwidth_monitor.add(host)
 
@@ -613,6 +611,49 @@ class MainMenu(CommandMenu):
     def _parse_scan_intensity(self, value):
         if value.isdigit() and int(value) in (ScanIntensity.QUICK, ScanIntensity.NORMAL, ScanIntensity.INTENSE):
             return int(value)
+
+    def _parse_rate_args(self, rate_string, direction):
+        """
+        Parses the `limit` rate argument. A single rate (e.g. '200kbit')
+        applies uniformly to every direction being limited. A compound
+        'up/down' rate (e.g. '200kbit/1mbit') sets independent upload
+        and download rates - only valid when both directions are being
+        limited (direction == BOTH), since a single selected direction
+        already has just one rate to set.
+
+        Returns a BitRate, an (upload_rate, download_rate) tuple, or
+        None on invalid input (with IO.error already reported).
+        """
+        if '/' not in rate_string:
+            try:
+                return BitRate.from_rate_string(rate_string)
+            except Exception:
+                IO.error('limit rate is invalid.')
+                return None
+
+        if direction != Direction.BOTH:
+            IO.error('a per-direction rate (up/down) requires both directions; use a single rate with --upload or --download.')
+            return None
+
+        parts = rate_string.split('/')
+        if len(parts) != 2:
+            IO.error('limit rate is invalid.')
+            return None
+
+        try:
+            return tuple(BitRate.from_rate_string(part) for part in parts)
+        except Exception:
+            IO.error('limit rate is invalid.')
+            return None
+
+    def _pretty_rate(self, rate):
+        """
+        Formats a BitRate or an (upload_rate, download_rate) tuple for
+        display, reusing the ↑/↓ convention already used by `monitor`.
+        """
+        if isinstance(rate, tuple):
+            return '{}↑ {}↓'.format(*rate)
+        return str(rate)
 
     def _free_host(self, host):
         """
