@@ -5,7 +5,7 @@ from unittest import mock
 # shell is loaded first (as the app's globals module does at startup).
 import evillimiter.console.shell  # noqa: F401
 from evillimiter.networking.host import Host
-from evillimiter.networking.limit import Limiter, Direction, LimitApplyError
+from evillimiter.networking.limit import Limiter, Direction, LimitApplyError, NetemRequiresLimitError
 from evillimiter.networking.utils import BitRate
 
 
@@ -266,7 +266,7 @@ class IndependentRateTest(unittest.TestCase):
         with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
             self.limiter.limit(self.host, Direction.BOTH, rate)
 
-        self.assertEqual(self.limiter.info(self.host), (rate, Direction.BOTH))
+        self.assertEqual(self.limiter.info(self.host), (rate, Direction.BOTH, None))
 
     def test_unlimit_tears_down_both_directions(self):
         with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
@@ -293,7 +293,7 @@ class IndependentRateTest(unittest.TestCase):
         ))
         self.assertIn('htb rate 1kbit', cmds)
         self.assertIn('htb rate 500kbit', cmds)
-        self.assertEqual(self.limiter.info(new_host), (rate, Direction.BOTH))
+        self.assertEqual(self.limiter.info(new_host), (rate, Direction.BOTH, None))
 
 
 class LimiterInfoTest(unittest.TestCase):
@@ -308,13 +308,102 @@ class LimiterInfoTest(unittest.TestCase):
         with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
             self.limiter.limit(self.host, Direction.OUTGOING, 1000)
 
-        self.assertEqual(self.limiter.info(self.host), (1000, Direction.OUTGOING))
+        self.assertEqual(self.limiter.info(self.host), (1000, Direction.OUTGOING, None))
 
     def test_blocked_host_returns_no_rate(self):
         with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
             self.limiter.block(self.host, Direction.BOTH)
 
-        self.assertEqual(self.limiter.info(self.host), (None, Direction.BOTH))
+        self.assertEqual(self.limiter.info(self.host), (None, Direction.BOTH, None))
+
+
+class NetemTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: emulate packet loss/delay
+    (tc-netem). Attaches to an already-limited host's existing tc
+    class - never ships as a standalone state, and never for a
+    blocked host (block() has no tc class to attach to).
+    """
+    def setUp(self):
+        self.limiter = Limiter('eth0')
+        self.host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'victim')
+
+    def test_requires_limit_on_untracked_host(self):
+        with self.assertRaises(NetemRequiresLimitError):
+            self.limiter.set_netem(self.host, delay=100, loss=5)
+
+    def test_requires_limit_on_blocked_host(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.block(self.host, Direction.BOTH)
+
+        with self.assertRaises(NetemRequiresLimitError):
+            self.limiter.set_netem(self.host, delay=100, loss=5)
+
+    def test_set_netem_on_both_directions(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(1000))
+
+        ids = self.limiter._host_dict[self.host]['ids']
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.set_netem(self.host, delay=100, loss=5)
+        ))
+
+        self.assertIn('qdisc replace dev eth0 parent 1:{} handle {}: netem delay 100ms loss 5%'.format(ids.upload_id, ids.upload_id + 10000), cmds)
+        self.assertIn('qdisc replace dev eth0 parent 1:{} handle {}: netem delay 100ms loss 5%'.format(ids.download_id, ids.download_id + 10000), cmds)
+
+    def test_set_netem_on_single_direction_only_touches_that_class(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.OUTGOING, BitRate(1000))
+
+        ids = self.limiter._host_dict[self.host]['ids']
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.set_netem(self.host, delay=100)
+        ))
+
+        self.assertIn('parent 1:{}'.format(ids.upload_id), cmds)
+        self.assertNotIn('parent 1:{}'.format(ids.download_id), cmds)
+        self.assertIn('netem delay 100ms', cmds)
+        self.assertNotIn('loss', cmds)
+
+    def test_set_netem_updates_info(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(1000))
+            self.limiter.set_netem(self.host, delay=100, loss=5)
+
+        self.assertEqual(self.limiter.info(self.host)[2], {'delay': 100, 'loss': 5})
+
+    def test_clear_netem_removes_qdisc_and_resets_info(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(1000))
+            self.limiter.set_netem(self.host, delay=100, loss=5)
+
+        ids = self.limiter._host_dict[self.host]['ids']
+        cmds = '\n'.join(_capture_commands(
+            lambda: self.limiter.clear_netem(self.host)
+        ))
+
+        self.assertIn('qdisc del dev eth0 parent 1:{} handle {}:'.format(ids.upload_id, ids.upload_id + 10000), cmds)
+        self.assertIn('qdisc del dev eth0 parent 1:{} handle {}:'.format(ids.download_id, ids.download_id + 10000), cmds)
+        self.assertIsNone(self.limiter.info(self.host)[2])
+
+    def test_clear_netem_is_a_noop_when_never_set(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(1000))
+
+        cmds = _capture_commands(lambda: self.limiter.clear_netem(self.host))
+        self.assertEqual(cmds, [])
+
+    def test_clear_netem_is_a_noop_on_untracked_host(self):
+        cmds = _capture_commands(lambda: self.limiter.clear_netem(self.host))
+        self.assertEqual(cmds, [])
+
+    def test_relimiting_drops_stale_netem_state(self):
+        with mock.patch('evillimiter.networking.limit.shell.execute_suppressed', return_value=0):
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(1000))
+            self.limiter.set_netem(self.host, delay=100, loss=5)
+            self.limiter.limit(self.host, Direction.BOTH, BitRate(2000))
+
+        self.assertIsNone(self.limiter.info(self.host)[2])
 
 
 if __name__ == '__main__':

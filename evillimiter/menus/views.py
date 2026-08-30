@@ -232,6 +232,11 @@ def print_help():
 {y}      (--upload) (--download){r}{}{b}e.g.: block 3,2
 {s}      block all --upload{r}
 
+{y}netem [ID1,ID2,...]{r}{}emulates delay/packet loss on limited host(s).
+{y}      (--delay [ms]) (--loss [%]){r}{}requires the host to already be limited.
+{b}{s}e.g.: netem 4 --delay 200ms --loss 10%
+{s}      netem 4 --clear{r}
+
 {y}free [ID1,ID2,...]{r}{}unlimits/unblocks host(s).
 {b}{s}e.g.: free 3
 {s}      free all{r}
@@ -267,6 +272,8 @@ def print_help():
                 spaces[len('      (--upload) (--download)'):],
                 spaces[len('block [ID1,ID2,...]'):],
                 spaces[len('      (--upload) (--download)'):],
+                spaces[len('netem [ID1,ID2,...]'):],
+                spaces[len('      (--delay [ms]) (--loss [%])'):],
                 spaces[len('free [ID1,ID2,...]'):],
                 spaces[len('add [IP] (--mac [MAC])'):],
                 spaces[len('monitor (--interval [time in ms])'):],

@@ -7,6 +7,7 @@
 - Added `auto_scan` config option (opt-in) to run `scan` then `hosts` automatically at startup
 - `monitor` now tracks bandwidth for every discovered host, not just limited/blocked ones
 - `limit` now accepts `up/down` rates (e.g. `200kbit/1mbit`) for independent upload/download limits in one call
+- Added `netem` command to emulate packet delay/loss (tc-netem) on an already-limited host
 
 [ v1.6.0 ]
 - Added IPv6 (NDP) spoofing so limit/block also cover a host's IPv6 traffic, not just IPv4

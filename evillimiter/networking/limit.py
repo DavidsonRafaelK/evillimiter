@@ -5,6 +5,15 @@ from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
 
 
+# Offset applied to a host's tc class id to derive its netem qdisc's own
+# handle major number. Class ids start at 1 and the root qdisc is
+# `handle 1:0` (netutils.create_qdisc_root) - a plain reuse of the id
+# would collide with the root the moment id==1. Adding a large constant
+# keeps every netem handle unique (ids are already globally unique) and
+# guarantees it's never 1.
+NETEM_HANDLE_OFFSET = 10000
+
+
 class LimitApplyError(Exception):
     """
     Raised by limit()/block()/unlimit()/replace() after they've finished
@@ -22,6 +31,15 @@ class LimitApplyError(Exception):
         super().__init__('failed: {}'.format(', '.join(failed_steps)))
 
 
+class NetemRequiresLimitError(Exception):
+    """
+    Raised by set_netem()/clear_netem() when the host isn't currently
+    limited (untracked, or blocked - block() never creates a tc class
+    for netem to attach to).
+    """
+    pass
+
+
 class Limiter(object):
     class HostLimitIDs(object):
         def __init__(self, upload_id, download_id):
@@ -35,15 +53,16 @@ class Limiter(object):
 
     def info(self, host):
         """
-        Returns (rate, direction) for a currently limited/blocked host,
-        or None if the host isn't tracked. rate is None for a blocked
-        host (block() has no associated rate), a single BitRate for a
-        uniformly-limited host, or an (upload_rate, download_rate)
-        tuple for independent rates.
+        Returns (rate, direction, netem) for a currently limited/blocked
+        host, or None if the host isn't tracked. rate is None for a
+        blocked host (block() has no associated rate), a single BitRate
+        for a uniformly-limited host, or an (upload_rate, download_rate)
+        tuple for independent rates. netem is None, or a
+        {'delay':.., 'loss':..} dict if set_netem() has been applied.
         """
         with self._host_dict_lock:
             entry = self._host_dict.get(host)
-        return None if entry is None else (entry['rate'], entry['direction'])
+        return None if entry is None else (entry['rate'], entry['direction'], entry.get('netem'))
 
     def limit(self, host, direction, rate):
         """
@@ -115,6 +134,77 @@ class Limiter(object):
 
         if failed_steps:
             raise LimitApplyError(failed_steps, direction)
+
+    def set_netem(self, host, delay=None, loss=None):
+        """
+        Attaches (or updates) tc-netem packet delay/loss on an
+        already-limited host's existing tc class(es) - applies to
+        whichever direction(s) the host is currently limited in, no
+        separate direction of its own. Raises NetemRequiresLimitError
+        if the host isn't currently limited (untracked, or blocked -
+        block() has no tc class to attach to).
+        """
+        with self._host_dict_lock:
+            entry = self._host_dict.get(host)
+            if entry is None or entry['rate'] is None:
+                raise NetemRequiresLimitError()
+            host_ids = entry['ids']
+            direction = entry['direction']
+
+        failed_steps = []
+        netem_args = self._netem_qdisc_args(delay, loss)
+
+        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
+            if not self._run('{} qdisc replace dev {} parent 1:{id} handle {h}: netem {a}'.format(BIN_TC, self.interface, id=host_ids.upload_id, h=host_ids.upload_id + NETEM_HANDLE_OFFSET, a=netem_args)):
+                failed_steps.append('tc netem (upload)')
+        if (direction & Direction.INCOMING) == Direction.INCOMING:
+            if not self._run('{} qdisc replace dev {} parent 1:{id} handle {h}: netem {a}'.format(BIN_TC, self.interface, id=host_ids.download_id, h=host_ids.download_id + NETEM_HANDLE_OFFSET, a=netem_args)):
+                failed_steps.append('tc netem (download)')
+
+        with self._host_dict_lock:
+            if host in self._host_dict:
+                self._host_dict[host]['netem'] = {'delay': delay, 'loss': loss}
+
+        if failed_steps:
+            raise LimitApplyError(failed_steps, direction)
+
+    def clear_netem(self, host):
+        """
+        Removes tc-netem impairment from an already-limited host,
+        leaving its rate limit untouched. No-op if the host has no
+        netem applied (including an untracked host - clearing
+        something that was never set isn't an error).
+        """
+        with self._host_dict_lock:
+            entry = self._host_dict.get(host)
+            if entry is None or entry.get('netem') is None:
+                return
+            host_ids = entry['ids']
+            direction = entry['direction']
+
+        failed_steps = []
+
+        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
+            if not self._run('{} qdisc del dev {} parent 1:{id} handle {h}:'.format(BIN_TC, self.interface, id=host_ids.upload_id, h=host_ids.upload_id + NETEM_HANDLE_OFFSET)):
+                failed_steps.append('tc netem delete (upload)')
+        if (direction & Direction.INCOMING) == Direction.INCOMING:
+            if not self._run('{} qdisc del dev {} parent 1:{id} handle {h}:'.format(BIN_TC, self.interface, id=host_ids.download_id, h=host_ids.download_id + NETEM_HANDLE_OFFSET)):
+                failed_steps.append('tc netem delete (download)')
+
+        with self._host_dict_lock:
+            if host in self._host_dict:
+                self._host_dict[host]['netem'] = None
+
+        if failed_steps:
+            raise LimitApplyError(failed_steps, direction)
+
+    def _netem_qdisc_args(self, delay, loss):
+        parts = []
+        if delay is not None:
+            parts.append('delay {}ms'.format(delay))
+        if loss is not None:
+            parts.append('loss {}%'.format(loss))
+        return ' '.join(parts)
 
     def unlimit(self, host, direction):
         if not host.limited and not host.blocked:

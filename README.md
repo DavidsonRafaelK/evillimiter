@@ -95,6 +95,7 @@ range = 192.168.1.1-192.168.1.50
 | ```hosts (--force)``` | Displays all the hosts/devices previously scanned and basic information. Shows ID for each host that is required for interaction.<br>```--force``` forces the table to be shown, even when it doesn't fit the terminal.
 | ```limit [ID1,ID2,...] [Rate] (--upload) (--download)``` | Limits bandwidth of host(s) associated to specified ID. Rate determines the internet speed. Host(s) are automatically added to the watchlist.<br>```--upload``` limits outgoing traffic only.<br>```--download``` limits incoming traffic only.<br>Valid rates: ```bit```, ```kbit```, ```mbit```, ```gbit```<br>Rate can also be ```up/down``` (e.g. ```200kbit/1mbit```) for independent upload/download rates - only valid with both directions (no ```--upload```/```--download```).<br>For example: ```limit 4,5,6 200kbit``` or ```limit all 1gbit``` or ```limit 4 200kbit/1mbit```
 | ```block [ID1,ID2,...] (--upload) (--download)``` | Blocks internet connection of host(s) associated to specified ID. Host(s) are automatically added to the watchlist.<br>```--upload``` limits outgoing traffic only <br>```--download``` limits incoming traffic only.
+| ```netem [ID1,ID2,...] (--delay [ms]) (--loss [%]) (--clear)``` | Emulates packet delay/loss on host(s) - **requires the host to already be `limit`ed**, since it attaches to the existing rate-limit tc class. Attaches to whichever direction(s) the host is limited in; no separate direction flag.<br>```--clear``` removes netem while leaving the rate limit in place.<br>For example: ```netem 4 --delay 200ms --loss 10%``` or ```netem 4 --clear```
 | ```free [ID1,ID2,...]``` | Unlimits/Unblocks host(s) associated to specified ID. Removes all further restrictions.
 | ```add [IP] (--mac [MAC])``` | Adds custom host to host list. MAC-Address will be resolved automatically or can be specified manually.<br>For example: ```add 192.168.178.24``` or ```add 192.168.1.50 --mac 1c:fc:bc:2d:a6:37```
 | ```monitor (--interval [time in ms])``` | Monitors bandwidth usage of every discovered host, not just limited/blocked ones (current usage, total bandwidth used, ...).<br>```--interval``` sets the interval after bandwidth information get refreshed in milliseconds (default 500ms).<br>For example: ```monitor --interval 1000```
@@ -139,6 +140,7 @@ Everything below was added in this fork, on top of upstream's last release (v1.5
 - `auto_scan` config option to run `scan` then `hosts` automatically at startup
 - `monitor` tracks every discovered host, not just limited/blocked ones
 - `limit` accepts `up/down` rates (e.g. `200kbit/1mbit`) for independent upload/download limits in one call
+- `netem [ID] --delay [ms] --loss [%]` to emulate packet delay/loss on an already-limited host (`--clear` to remove it)
 
 See [CHANGELOG](CHANGELOG) for the full version history, including upstream's.
 

@@ -5,7 +5,7 @@ from unittest import mock
 import evillimiter.console.shell  # noqa: F401 - resolve circular import first
 from evillimiter.menus.main_menu import MainMenu
 from evillimiter.networking.host import Host
-from evillimiter.networking.limit import Direction, LimitApplyError
+from evillimiter.networking.limit import Direction, LimitApplyError, NetemRequiresLimitError
 from evillimiter.networking.utils import BitRate
 
 
@@ -198,7 +198,7 @@ class PrettyHostStatusTest(unittest.TestCase):
 
     def test_limited_both_directions_shows_rate_without_direction(self):
         self.host.limited = True
-        self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH)
+        self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH, None)
 
         result = MainMenu._pretty_host_status(self.menu, self.host)
 
@@ -208,7 +208,7 @@ class PrettyHostStatusTest(unittest.TestCase):
 
     def test_limited_single_direction_shows_rate_and_direction(self):
         self.host.limited = True
-        self.menu.limiter.info.return_value = (BitRate(1000), Direction.OUTGOING)
+        self.menu.limiter.info.return_value = (BitRate(1000), Direction.OUTGOING, None)
 
         result = MainMenu._pretty_host_status(self.menu, self.host)
 
@@ -216,17 +216,27 @@ class PrettyHostStatusTest(unittest.TestCase):
 
     def test_blocked_both_directions_shows_bare_status(self):
         self.host.blocked = True
-        self.menu.limiter.info.return_value = (None, Direction.BOTH)
+        self.menu.limiter.info.return_value = (None, Direction.BOTH, None)
 
         self.assertEqual(MainMenu._pretty_host_status(self.menu, self.host), self.host.pretty_status())
 
     def test_blocked_single_direction_shows_direction(self):
         self.host.blocked = True
-        self.menu.limiter.info.return_value = (None, Direction.INCOMING)
+        self.menu.limiter.info.return_value = (None, Direction.INCOMING, None)
 
         result = MainMenu._pretty_host_status(self.menu, self.host)
 
         self.assertIn('download', result)
+
+    def test_limited_with_netem_appends_bracketed_detail(self):
+        self.host.limited = True
+        self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH, {'delay': 100, 'loss': 5})
+        self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+
+        result = MainMenu._pretty_host_status(self.menu, self.host)
+
+        self.assertIn('1kbit', result)
+        self.assertIn('[delay 100ms, loss 5%]', result)
 
 
 class ScanHandlerIntensityTest(unittest.TestCase):
@@ -359,6 +369,128 @@ class LimitHandlerIndependentRateTest(unittest.TestCase):
 
         menu.limiter.limit.assert_not_called()
         menu.arp_spoofer.add.assert_not_called()
+
+
+class ParseNetemArgsTest(unittest.TestCase):
+    def test_neither_flag_given_returns_none_pair(self):
+        args = mock.Mock(delay=None, loss=None)
+        self.assertEqual(MainMenu._parse_netem_args(mock.Mock(), args), (None, None))
+
+    def test_valid_delay_and_loss(self):
+        args = mock.Mock(delay='100', loss='5')
+        self.assertEqual(MainMenu._parse_netem_args(mock.Mock(), args), (100, 5))
+
+    def test_delay_only(self):
+        args = mock.Mock(delay='250', loss=None)
+        self.assertEqual(MainMenu._parse_netem_args(mock.Mock(), args), (250, None))
+
+    def test_invalid_delay_reports_error_and_returns_none(self):
+        args = mock.Mock(delay='fast', loss=None)
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            result = MainMenu._parse_netem_args(mock.Mock(), args)
+
+        self.assertIsNone(result)
+        io.error.assert_called_once()
+
+    def test_loss_out_of_range_reports_error_and_returns_none(self):
+        args = mock.Mock(delay=None, loss='150')
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            result = MainMenu._parse_netem_args(mock.Mock(), args)
+
+        self.assertIsNone(result)
+        io.error.assert_called_once()
+
+    def test_loss_non_numeric_reports_error_and_returns_none(self):
+        args = mock.Mock(delay=None, loss='a-lot')
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            result = MainMenu._parse_netem_args(mock.Mock(), args)
+
+        self.assertIsNone(result)
+        io.error.assert_called_once()
+
+
+class NetemHandlerTest(unittest.TestCase):
+    """
+    bitbrute/evillimiter#63 wishlist: emulate packet loss/delay
+    (tc-netem), only on an already-limited host.
+    """
+    def setUp(self):
+        self.host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
+        self.menu = mock.Mock()
+        self.menu._get_hosts_by_ids.return_value = [self.host]
+        # pure (ignores menu state) - delegate to the real implementation
+        # so these tests still exercise real --delay/--loss validation
+        self.menu._parse_netem_args.side_effect = lambda args: MainMenu._parse_netem_args(self.menu, args)
+        self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+
+    def test_applies_parsed_delay_and_loss(self):
+        args = mock.Mock(id='0', clear=False, delay='100', loss='5')
+
+        MainMenu._netem_handler(self.menu, args)
+
+        self.menu.limiter.set_netem.assert_called_once_with(self.host, 100, 5)
+
+    def test_neither_delay_nor_loss_given_is_an_error_and_skips_limiter(self):
+        args = mock.Mock(id='0', clear=False, delay=None, loss=None)
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._netem_handler(self.menu, args)
+
+        io.error.assert_called_once()
+        self.menu.limiter.set_netem.assert_not_called()
+
+    def test_invalid_args_aborts_before_touching_limiter(self):
+        args = mock.Mock(id='0', clear=False, delay='not-a-number', loss=None)
+
+        with mock.patch('evillimiter.menus.main_menu.IO'):
+            MainMenu._netem_handler(self.menu, args)
+
+        self.menu.limiter.set_netem.assert_not_called()
+
+    def test_requires_limit_error_reports_error_and_continues(self):
+        self.menu.limiter.set_netem.side_effect = NetemRequiresLimitError()
+        args = mock.Mock(id='0', clear=False, delay='100', loss=None)
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._netem_handler(self.menu, args)
+
+        io.error.assert_called_once()
+
+    def test_partial_apply_reports_failed_steps(self):
+        self.menu.limiter.set_netem.side_effect = LimitApplyError(['tc netem (upload)'], Direction.BOTH)
+        args = mock.Mock(id='0', clear=False, delay='100', loss=None)
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._netem_handler(self.menu, args)
+
+        io.error.assert_called_once()
+        self.assertIn('tc netem (upload)', io.error.call_args.args[0])
+
+    def test_clear_flag_calls_clear_netem_instead_of_set_netem(self):
+        args = mock.Mock(id='0', clear=True)
+
+        MainMenu._netem_handler(self.menu, args)
+
+        self.menu.limiter.clear_netem.assert_called_once_with(self.host)
+        self.menu.limiter.set_netem.assert_not_called()
+
+    def test_clear_flag_partial_apply_reports_failed_steps(self):
+        self.menu.limiter.clear_netem.side_effect = LimitApplyError(['tc netem delete (upload)'], Direction.BOTH)
+        args = mock.Mock(id='0', clear=True)
+
+        with mock.patch('evillimiter.menus.main_menu.IO') as io:
+            MainMenu._netem_handler(self.menu, args)
+
+        io.error.assert_called_once()
+        self.assertIn('tc netem delete (upload)', io.error.call_args.args[0])
+
+    def test_no_hosts_resolved_is_a_noop(self):
+        self.menu._get_hosts_by_ids.return_value = None
+        args = mock.Mock(id='99', clear=False, delay='100', loss=None)
+
+        MainMenu._netem_handler(self.menu, args)
+
+        self.menu.limiter.set_netem.assert_not_called()
 
 
 class MonitorHandlerTest(unittest.TestCase):

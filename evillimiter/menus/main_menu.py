@@ -10,7 +10,7 @@ from evillimiter.networking.utils import BitRate
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
-from evillimiter.networking.limit import Limiter, Direction, LimitApplyError
+from evillimiter.networking.limit import Limiter, Direction, LimitApplyError, NetemRequiresLimitError
 from evillimiter.networking.spoof import ARPSpoofer
 from evillimiter.networking.ndp_spoof import NDPSpoofer
 from evillimiter.networking.scan import HostScanner, ScanIntensity
@@ -108,6 +108,12 @@ class MainMenu(CommandMenu):
         block_parser.add_parameter('id')
         block_parser.add_flag('--upload', 'upload')
         block_parser.add_flag('--download', 'download')
+
+        netem_parser = self.parser.add_subparser('netem', self._netem_handler)
+        netem_parser.add_parameter('id')
+        netem_parser.add_parameterized_flag('--delay', 'delay')
+        netem_parser.add_parameterized_flag('--loss', 'loss')
+        netem_parser.add_flag('--clear', 'clear')
 
         free_parser = self.parser.add_subparser('free', self._free_handler)
         free_parser.add_parameter('id')
@@ -220,14 +226,19 @@ class MainMenu(CommandMenu):
         if info is None:
             return status
 
-        rate, direction = info
+        rate, direction, netem = info
         detail = self._pretty_rate(rate) if rate is not None else None
 
         if direction != Direction.BOTH:
             direction_str = Direction.pretty_direction(direction)
             detail = '{} {}'.format(detail, direction_str) if detail else direction_str
 
-        return '{} ({})'.format(status, detail) if detail else status
+        status = '{} ({})'.format(status, detail) if detail else status
+
+        if netem is not None:
+            status = '{} [{}]'.format(status, self._pretty_netem(netem))
+
+        return status
 
     def _limit_handler(self, args):
         """
@@ -282,6 +293,46 @@ class MainMenu(CommandMenu):
                     IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
                 self.bandwidth_monitor.add(host)
+
+    def _netem_handler(self, args):
+        """
+        Handles 'netem' command-line argument
+        Applies/clears tc-netem delay/loss on already-limited host(s).
+        Attaches to whichever direction(s) the host is currently
+        limited in - no separate direction of its own.
+        """
+        hosts = self._get_hosts_by_ids(args.id)
+        if hosts is None or len(hosts) == 0:
+            return
+
+        if args.clear:
+            for host in hosts:
+                try:
+                    self.limiter.clear_netem(host)
+                except LimitApplyError as e:
+                    IO.error('{}{}{r} netem clear only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                else:
+                    IO.ok('{}{}{r} netem cleared.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, r=IO.Style.RESET_ALL))
+            return
+
+        parsed = self._parse_netem_args(args)
+        if parsed is None:
+            return
+
+        delay, loss = parsed
+        if delay is None and loss is None:
+            IO.error('specify at least one of --delay or --loss (or --clear to remove existing netem).')
+            return
+
+        for host in hosts:
+            try:
+                self.limiter.set_netem(host, delay, loss)
+            except NetemRequiresLimitError:
+                IO.error('{}{}{r} must be limited first (netem attaches to the existing rate class).'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, r=IO.Style.RESET_ALL))
+            except LimitApplyError as e:
+                IO.error('{}{}{r} netem only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+            else:
+                IO.ok('{}{}{r} netem applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, self._pretty_netem({'delay': delay, 'loss': loss}), r=IO.Style.RESET_ALL))
 
     def _free_handler(self, args):
         """
@@ -646,6 +697,29 @@ class MainMenu(CommandMenu):
             IO.error('limit rate is invalid.')
             return None
 
+    def _parse_netem_args(self, args):
+        """
+        Parses `netem`'s --delay/--loss flags. Returns (delay, loss) as
+        ints (ms / percent), each None if its flag wasn't given, or
+        None outright (with IO.error already reported) if a given
+        flag's value is invalid.
+        """
+        delay = None
+        if args.delay:
+            if not args.delay.isdigit():
+                IO.error('delay must be a whole number of milliseconds.')
+                return None
+            delay = int(args.delay)
+
+        loss = None
+        if args.loss:
+            if not args.loss.isdigit() or not (0 <= int(args.loss) <= 100):
+                IO.error('loss must be a whole percentage between 0 and 100.')
+                return None
+            loss = int(args.loss)
+
+        return (delay, loss)
+
     def _pretty_rate(self, rate):
         """
         Formats a BitRate or an (upload_rate, download_rate) tuple for
@@ -654,6 +728,18 @@ class MainMenu(CommandMenu):
         if isinstance(rate, tuple):
             return '{}↑ {}↓'.format(*rate)
         return str(rate)
+
+    def _pretty_netem(self, netem):
+        """
+        Formats a {'delay':.., 'loss':..} netem dict (as returned by
+        Limiter.info()) for display, e.g. 'delay 100ms, loss 5%'.
+        """
+        parts = []
+        if netem.get('delay') is not None:
+            parts.append('delay {}ms'.format(netem['delay']))
+        if netem.get('loss') is not None:
+            parts.append('loss {}%'.format(netem['loss']))
+        return ', '.join(parts)
 
     def _free_host(self, host):
         """
