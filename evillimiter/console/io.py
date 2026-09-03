@@ -69,6 +69,15 @@ class IO(object):
             IO._logger.error(IO._remove_colors(text))
 
     @staticmethod
+    def highlight(text):
+        """
+        Wraps text in the yellow highlight used across the UI for
+        values (ids, ips, names, attributes). Colors are stripped at
+        print time when colorless mode is on, same as any other output.
+        """
+        return '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, text, IO.Style.RESET_ALL)
+
+    @staticmethod
     def spacer():
         """
         Prints a blank line for attraction purposes
