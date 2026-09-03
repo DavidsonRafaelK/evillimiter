@@ -15,6 +15,9 @@ class BarChart(object):
         def remap(n, old_min, old_max, new_min, new_max):
             return (((n - old_min) * (new_max - new_min)) / (old_max - old_min)) + new_min
         
+        if not self._data:
+            return ''
+
         self._data.sort(reverse=reverse, key=lambda x: x['value'])
 
         max_value = self._data[0]['value'] if reverse else self._data[-1]['value']
