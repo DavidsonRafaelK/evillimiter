@@ -20,3 +20,6 @@ TODO
 graphify-out/
 .venv/
 .idea/
+
+# Local environment / secrets
+.env
