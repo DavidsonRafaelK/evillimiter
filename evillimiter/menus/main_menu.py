@@ -752,12 +752,7 @@ class MainMenu(CommandMenu):
         Formats a {'delay':.., 'loss':..} netem dict (as returned by
         Limiter.info()) for display, e.g. 'delay 100ms, loss 5%'.
         """
-        parts = []
-        if netem.get('delay') is not None:
-            parts.append('delay {}ms'.format(netem['delay']))
-        if netem.get('loss') is not None:
-            parts.append('loss {}%'.format(netem['loss']))
-        return ', '.join(parts)
+        return netutils.format_netem(netem.get('delay'), netem.get('loss'), sep=', ')
 
     def _report_partial(self, host, action, err, verb='applied'):
         """

@@ -3,6 +3,7 @@ import threading
 import evillimiter.console.shell as shell
 from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
+from evillimiter.networking.utils import format_netem
 
 
 # Offset applied to a host's tc class id to derive its netem qdisc's own
@@ -199,12 +200,7 @@ class Limiter(object):
             raise LimitApplyError(failed_steps, direction)
 
     def _netem_qdisc_args(self, delay, loss):
-        parts = []
-        if delay is not None:
-            parts.append('delay {}ms'.format(delay))
-        if loss is not None:
-            parts.append('loss {}%'.format(loss))
-        return ' '.join(parts)
+        return format_netem(delay, loss)
 
     def unlimit(self, host, direction):
         if not host.limited and not host.blocked:

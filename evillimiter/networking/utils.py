@@ -270,6 +270,20 @@ def disable_ip_forwarding():
     return shell.execute_suppressed('{} -w {}=0'.format(BIN_SYSCTL, IP_FORWARD_LOC)) == 0
 
 
+def format_netem(delay=None, loss=None, sep=' '):
+    """
+    Formats tc-netem delay/loss into a string, omitting whichever is
+    None. sep is ' ' for tc qdisc args ('delay 100ms loss 5%') or
+    ', ' for display ('delay 100ms, loss 5%').
+    """
+    parts = []
+    if delay is not None:
+        parts.append('delay {}ms'.format(delay))
+    if loss is not None:
+        parts.append('loss {}%'.format(loss))
+    return sep.join(parts)
+
+
 class ValueConverter:
     @staticmethod
     def byte_to_bit(v):
