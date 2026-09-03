@@ -36,5 +36,18 @@ class BandwidthMonitorReplaceTest(unittest.TestCase):
         self.assertEqual(monitor._host_result_dict, {})
 
 
+
+class BandwidthMonitorGetTest(unittest.TestCase):
+    def test_get_survives_zero_elapsed_time(self):
+        import time
+        monitor = BandwidthMonitor('eth0', 1)
+        host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'phone')
+        monitor.add(host)
+        # force zero elapsed time between add() and get()
+        monitor._host_result_dict[host]['last_now'] = time.time() + 1
+        # must not raise ZeroDivisionError
+        self.assertIsNotNone(monitor.get(host))
+
+
 if __name__ == '__main__':
     unittest.main()
