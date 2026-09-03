@@ -61,6 +61,8 @@ class BandwidthMonitor(object):
             if host in self._host_result_dict:
                 last_now = self._host_result_dict[host]['last_now']
                 time_passed = time.time() - last_now
+                if time_passed <= 0:
+                    time_passed = 1e-6
                 result = self._host_result_dict[host]['result']
                 result.upload_rate = BitRate(int(ValueConverter.byte_to_bit(result._upload_temp_size.value) / time_passed))
                 result.download_rate = BitRate(int(ValueConverter.byte_to_bit(result._download_temp_size.value) / time_passed))
