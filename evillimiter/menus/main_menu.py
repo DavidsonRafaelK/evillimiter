@@ -6,7 +6,7 @@ import threading
 import evillimiter.networking.utils as netutils
 from . import views
 from .menu import CommandMenu
-from evillimiter.networking.utils import BitRate
+from evillimiter.networking.utils import BitRate, InvalidBitRate
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
@@ -696,7 +696,7 @@ class MainMenu(CommandMenu):
         if '/' not in rate_string:
             try:
                 return BitRate.from_rate_string(rate_string)
-            except Exception:
+            except InvalidBitRate:
                 IO.error('limit rate is invalid.')
                 return None
 
@@ -711,7 +711,7 @@ class MainMenu(CommandMenu):
 
         try:
             return tuple(BitRate.from_rate_string(part) for part in parts)
-        except Exception:
+        except InvalidBitRate:
             IO.error('limit rate is invalid.')
             return None
 

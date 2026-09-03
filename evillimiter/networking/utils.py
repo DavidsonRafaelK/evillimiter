@@ -270,6 +270,14 @@ def disable_ip_forwarding():
     return shell.execute_suppressed('{} -w {}=0'.format(BIN_SYSCTL, IP_FORWARD_LOC)) == 0
 
 
+class InvalidBitRate(ValueError):
+    """Raised when a bitrate string can't be parsed (bad/missing unit)."""
+
+
+class InvalidByteValue(ValueError):
+    """Raised when a byte-size string can't be parsed (bad/missing unit)."""
+
+
 def format_netem(delay=None, loss=None, sep=' '):
     """
     Formats tc-netem delay/loss into a string, omitting whichever is
@@ -360,7 +368,7 @@ class BitRate(object):
         elif unit == 'gbit':
             return number * 1000 ** 3
         else:
-            raise Exception('Invalid bitrate')
+            raise InvalidBitRate(rate_string)
 
 
 class ByteValue(object):
@@ -455,4 +463,4 @@ class ByteValue(object):
         elif unit == 'tb':
             return number * 1024 ** 4
         else:
-            raise Exception('Invalid byte string')
+            raise InvalidByteValue(byte_string)
