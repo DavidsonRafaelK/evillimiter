@@ -37,7 +37,7 @@ def print_hosts_table(rows, force):
 
     for id_, ip, mac, name, status in rows:
         table_data.append([
-            '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL),
+            IO.highlight(id_),
             ip,
             mac,
             name,
@@ -81,12 +81,12 @@ def print_watch(watch_rows, range_str, interval, history_rows):
     ]]
 
     set_table_data.append([
-        '{}range{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
+        IO.highlight('range'),
         range_str
     ])
 
     set_table_data.append([
-        '{}interval{}'.format(IO.Fore.LIGHTYELLOW_EX, IO.Style.RESET_ALL),
+        IO.highlight('interval'),
         '{}s'.format(interval)
     ])
 
@@ -97,7 +97,7 @@ def print_watch(watch_rows, range_str, interval, history_rows):
             status = '{}Online{}'.format(IO.Fore.LIGHTGREEN_EX, IO.Style.RESET_ALL)
 
         watch_table_data.append([
-            '{}{}{}'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL),
+            IO.highlight(id_),
             ip,
             mac,
             status
