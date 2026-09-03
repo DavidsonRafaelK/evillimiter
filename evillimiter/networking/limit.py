@@ -3,6 +3,7 @@ import threading
 import evillimiter.console.shell as shell
 from .host import Host
 from evillimiter.common.globals import BIN_TC, BIN_IPTABLES
+from evillimiter.networking.utils import format_netem
 
 
 # Offset applied to a host's tc class id to derive its netem qdisc's own
@@ -64,6 +65,30 @@ class Limiter(object):
             entry = self._host_dict.get(host)
         return None if entry is None else (entry['rate'], entry['direction'], entry.get('netem'))
 
+    def _direction_meta(self, single_direction):
+        """
+        Static per-direction attributes shared by every tc/iptables
+        command: (label, iptables source/dest flag, mangle MARK chain,
+        host<->this-machine DROP chain).
+        """
+        if single_direction == Direction.OUTGOING:
+            return 'upload', '-s', 'POSTROUTING', 'INPUT'
+        return 'download', '-d', 'PREROUTING', 'OUTPUT'
+
+    def _iter_directions(self, direction):
+        """
+        Yields (single_direction, label, flag, mangle_chain, local_chain)
+        for each direction present in `direction`, replacing the repeated
+        `(direction & X) == X` guards.
+        """
+        for single in (Direction.OUTGOING, Direction.INCOMING):
+            if (direction & single) == single:
+                label, flag, mangle_chain, local_chain = self._direction_meta(single)
+                yield single, label, flag, mangle_chain, local_chain
+
+    def _id_for_direction(self, host_ids, single_direction):
+        return host_ids.upload_id if single_direction == Direction.OUTGOING else host_ids.download_id
+
     def limit(self, host, direction, rate):
         """
         Limits the uload/dload traffic of a host to a specified rate.
@@ -79,26 +104,19 @@ class Limiter(object):
 
         host_ids, failed_steps = self._new_host_limit_ids(host, direction)
 
-        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
+        rates = {Direction.OUTGOING: upload_rate, Direction.INCOMING: download_rate}
+        for single, label, flag, mangle_chain, _ in self._iter_directions(direction):
+            id_ = self._id_for_direction(host_ids, single)
+            r = rates[single]
             # add a class to the root qdisc with specified rate
-            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.upload_id, r=upload_rate, b=upload_rate * 1.1)):
-                failed_steps.append('tc class (upload)')
+            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, id_, r=r, b=r * 1.1)):
+                failed_steps.append('tc class ({})'.format(label))
             # add a fw filter that filters packets marked with the corresponding ID
-            if not self._run('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.upload_id)):
-                failed_steps.append('tc filter (upload)')
-            # marks outgoing packets
-            if not self._run('{} -t mangle -A POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, host_ids.upload_id)):
-                failed_steps.append('iptables mark (upload)')
-        if (direction & Direction.INCOMING) == Direction.INCOMING:
-            # add a class to the root qdisc with specified rate
-            if not self._run('{} class add dev {} parent 1:0 classid 1:{} htb rate {r} burst {b}'.format(BIN_TC, self.interface, host_ids.download_id, r=download_rate, b=download_rate * 1.1)):
-                failed_steps.append('tc class (download)')
-            # add a fw filter that filters packets marked with the corresponding ID
-            if not self._run('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=host_ids.download_id)):
-                failed_steps.append('tc filter (download)')
-            # marks incoming packets
-            if not self._run('{} -t mangle -A PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, host_ids.download_id)):
-                failed_steps.append('iptables mark (download)')
+            if not self._run('{} filter add dev {} parent 1:0 protocol ip prio {id} handle {id} fw flowid 1:{id}'.format(BIN_TC, self.interface, id=id_)):
+                failed_steps.append('tc filter ({})'.format(label))
+            # marks packets in this direction
+            if not self._run('{} -t mangle -A {chain} {flag} {ip} -j MARK --set-mark {id}'.format(BIN_IPTABLES, chain=mangle_chain, flag=flag, ip=host.ip, id=id_)):
+                failed_steps.append('iptables mark ({})'.format(label))
 
         host.limited = True
 
@@ -111,21 +129,14 @@ class Limiter(object):
     def block(self, host, direction):
         host_ids, failed_steps = self._new_host_limit_ids(host, direction)
 
-        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            # drops forwarded packets with matching source (traffic routed
-            # through this machine, e.g. towards the internet)
-            if not self._run('{} -t filter -A FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed_steps.append('iptables forward drop (upload)')
-            # drops packets the host sends directly to this machine
-            if not self._run('{} -t filter -A INPUT -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed_steps.append('iptables input drop (upload)')
-        if (direction & Direction.INCOMING) == Direction.INCOMING:
-            # drops forwarded packets with matching destination
-            if not self._run('{} -t filter -A FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed_steps.append('iptables forward drop (download)')
-            # drops packets this machine sends directly to the host
-            if not self._run('{} -t filter -A OUTPUT -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed_steps.append('iptables output drop (download)')
+        for single, label, flag, _, local_chain in self._iter_directions(direction):
+            # drops forwarded packets matching this direction (routed
+            # traffic, e.g. towards the internet)
+            if not self._run('{} -t filter -A FORWARD {flag} {ip} -j DROP'.format(BIN_IPTABLES, flag=flag, ip=host.ip)):
+                failed_steps.append('iptables forward drop ({})'.format(label))
+            # drops packets directly between the host and this machine
+            if not self._run('{} -t filter -A {chain} {flag} {ip} -j DROP'.format(BIN_IPTABLES, chain=local_chain, flag=flag, ip=host.ip)):
+                failed_steps.append('iptables {} drop ({})'.format(local_chain.lower(), label))
 
         host.blocked = True
 
@@ -154,12 +165,10 @@ class Limiter(object):
         failed_steps = []
         netem_args = self._netem_qdisc_args(delay, loss)
 
-        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            if not self._run('{} qdisc replace dev {} parent 1:{id} handle {h}: netem {a}'.format(BIN_TC, self.interface, id=host_ids.upload_id, h=host_ids.upload_id + NETEM_HANDLE_OFFSET, a=netem_args)):
-                failed_steps.append('tc netem (upload)')
-        if (direction & Direction.INCOMING) == Direction.INCOMING:
-            if not self._run('{} qdisc replace dev {} parent 1:{id} handle {h}: netem {a}'.format(BIN_TC, self.interface, id=host_ids.download_id, h=host_ids.download_id + NETEM_HANDLE_OFFSET, a=netem_args)):
-                failed_steps.append('tc netem (download)')
+        for single, label, _, _, _ in self._iter_directions(direction):
+            id_ = self._id_for_direction(host_ids, single)
+            if not self._run('{} qdisc replace dev {} parent 1:{id} handle {h}: netem {a}'.format(BIN_TC, self.interface, id=id_, h=id_ + NETEM_HANDLE_OFFSET, a=netem_args)):
+                failed_steps.append('tc netem ({})'.format(label))
 
         with self._host_dict_lock:
             if host in self._host_dict:
@@ -184,12 +193,10 @@ class Limiter(object):
 
         failed_steps = []
 
-        if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-            if not self._run('{} qdisc del dev {} parent 1:{id} handle {h}:'.format(BIN_TC, self.interface, id=host_ids.upload_id, h=host_ids.upload_id + NETEM_HANDLE_OFFSET)):
-                failed_steps.append('tc netem delete (upload)')
-        if (direction & Direction.INCOMING) == Direction.INCOMING:
-            if not self._run('{} qdisc del dev {} parent 1:{id} handle {h}:'.format(BIN_TC, self.interface, id=host_ids.download_id, h=host_ids.download_id + NETEM_HANDLE_OFFSET)):
-                failed_steps.append('tc netem delete (download)')
+        for single, label, _, _, _ in self._iter_directions(direction):
+            id_ = self._id_for_direction(host_ids, single)
+            if not self._run('{} qdisc del dev {} parent 1:{id} handle {h}:'.format(BIN_TC, self.interface, id=id_, h=id_ + NETEM_HANDLE_OFFSET)):
+                failed_steps.append('tc netem delete ({})'.format(label))
 
         with self._host_dict_lock:
             if host in self._host_dict:
@@ -199,12 +206,7 @@ class Limiter(object):
             raise LimitApplyError(failed_steps, direction)
 
     def _netem_qdisc_args(self, delay, loss):
-        parts = []
-        if delay is not None:
-            parts.append('delay {}ms'.format(delay))
-        if loss is not None:
-            parts.append('loss {}%'.format(loss))
-        return ' '.join(parts)
+        return format_netem(delay, loss)
 
     def unlimit(self, host, direction):
         if not host.limited and not host.blocked:
@@ -217,10 +219,9 @@ class Limiter(object):
             host_ids = info['ids']
             was_limited = info['rate'] is not None
 
-            if (direction & Direction.OUTGOING) == Direction.OUTGOING:
-                failed_steps += self._teardown_direction(host, host_ids.upload_id, Direction.OUTGOING, was_limited)
-            if (direction & Direction.INCOMING) == Direction.INCOMING:
-                failed_steps += self._teardown_direction(host, host_ids.download_id, Direction.INCOMING, was_limited)
+            for single, _, _, _, _ in self._iter_directions(direction):
+                id_ = self._id_for_direction(host_ids, single)
+                failed_steps += self._teardown_direction(host, id_, single, was_limited)
 
             del self._host_dict[host]
 
@@ -354,13 +355,10 @@ class Limiter(object):
         """
         Deletes the mangle MARK rule limit() adds for one direction
         """
+        label, flag, mangle_chain, _ = self._direction_meta(single_direction)
         failed = []
-        if single_direction == Direction.OUTGOING:
-            if not self._run('{} -t mangle -D POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_)):
-                failed.append('iptables mark delete (upload)')
-        else:
-            if not self._run('{} -t mangle -D PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_)):
-                failed.append('iptables mark delete (download)')
+        if not self._run('{} -t mangle -D {chain} {flag} {ip} -j MARK --set-mark {id}'.format(BIN_IPTABLES, chain=mangle_chain, flag=flag, ip=host.ip, id=id_)):
+            failed.append('iptables mark delete ({})'.format(label))
         return failed
 
     def _delete_iptables_drop_entries(self, host, single_direction):
@@ -368,17 +366,12 @@ class Limiter(object):
         Deletes the FORWARD/INPUT/OUTPUT DROP rules block() adds for
         one direction
         """
+        label, flag, _, local_chain = self._direction_meta(single_direction)
         failed = []
-        if single_direction == Direction.OUTGOING:
-            if not self._run('{} -t filter -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables forward drop delete (upload)')
-            if not self._run('{} -t filter -D INPUT -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables input drop delete (upload)')
-        else:
-            if not self._run('{} -t filter -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables forward drop delete (download)')
-            if not self._run('{} -t filter -D OUTPUT -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables output drop delete (download)')
+        if not self._run('{} -t filter -D FORWARD {flag} {ip} -j DROP'.format(BIN_IPTABLES, flag=flag, ip=host.ip)):
+            failed.append('iptables forward drop delete ({})'.format(label))
+        if not self._run('{} -t filter -D {chain} {flag} {ip} -j DROP'.format(BIN_IPTABLES, chain=local_chain, flag=flag, ip=host.ip)):
+            failed.append('iptables {} drop delete ({})'.format(local_chain.lower(), label))
         return failed
 
 

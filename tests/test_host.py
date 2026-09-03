@@ -110,5 +110,13 @@ class DirectionTest(unittest.TestCase):
         self.assertEqual(Direction.pretty_direction(Direction.NONE), '-')
 
 
+class MacRandomizedTest(unittest.TestCase):
+    def test_locally_administered_mac_flagged(self):
+        self.assertTrue(Host('192.168.1.5', '02:11:22:33:44:55', '').mac_is_randomized)
+
+    def test_oui_mac_not_flagged(self):
+        self.assertFalse(Host('192.168.1.5', '1c:fc:bc:2d:a6:37', '').mac_is_randomized)
+
+
 if __name__ == '__main__':
     unittest.main()

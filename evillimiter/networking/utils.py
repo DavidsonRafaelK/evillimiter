@@ -251,6 +251,21 @@ def validate_mac_address(mac):
     return re.match(r'^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$', mac) is not None
 
 
+def is_locally_administered_mac(mac):
+    """
+    True if the MAC's locally-administered (U/L) bit is set (0x02 in the
+    first octet). A set U/L bit strongly indicates a randomized/private
+    address (default per-network-join behavior on modern Android/iOS)
+    rather than a manufacturer-assigned OUI - see the README's
+    Restrictions section on MAC randomization.
+    """
+    try:
+        first_octet = int(mac.split(':')[0], 16)
+    except (AttributeError, ValueError, IndexError):
+        return False
+    return bool(first_octet & 0x02)
+
+
 def create_qdisc_root(interface):
     """
     Creates a root htb qdisc in traffic control for a given interface
@@ -270,175 +285,142 @@ def disable_ip_forwarding():
     return shell.execute_suppressed('{} -w {}=0'.format(BIN_SYSCTL, IP_FORWARD_LOC)) == 0
 
 
+class InvalidBitRate(ValueError):
+    """Raised when a bitrate string can't be parsed (bad/missing unit)."""
+
+
+class InvalidByteValue(ValueError):
+    """Raised when a byte-size string can't be parsed (bad/missing unit)."""
+
+
+def format_netem(delay=None, loss=None, sep=' '):
+    """
+    Formats tc-netem delay/loss into a string, omitting whichever is
+    None. sep is ' ' for tc qdisc args ('delay 100ms loss 5%') or
+    ', ' for display ('delay 100ms, loss 5%').
+    """
+    parts = []
+    if delay is not None:
+        parts.append('delay {}ms'.format(delay))
+    if loss is not None:
+        parts.append('loss {}%'.format(loss))
+    return sep.join(parts)
+
+
 class ValueConverter:
     @staticmethod
     def byte_to_bit(v):
         return v * 8
 
 
-class BitRate(object):
-    def __init__(self, rate=0):
-        self.rate = rate
+class _ScaledValue(object):
+    """
+    Shared base for BitRate/ByteValue: a magnitude formatted with
+    unit-scaling and parsed from a "<number><unit>" string. Subclasses
+    only declare the base, the ordered unit list (low->high), the parse
+    factor map, and the exception raised on a bad unit.
+    """
+    _base = None
+    _units = ()
+    _unit_factors = {}
+    _invalid_exc = ValueError
+
+    def __init__(self, amount=0):
+        self._amount = amount
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
-        counter = 0
-        r = self.rate
+        v = self._amount
+        for unit in self._units:
+            if v < self._base:
+                return '{}{}'.format(int(v), unit)
+            v /= self._base
+        raise Exception('{} limit exceeded'.format(type(self).__name__))
 
-        while True:
-            if r >= 1000:
-                r /= 1000
-                counter += 1
+    def fmt(self, fmt):
+        string = self.__str__()
+        end = len([c for c in string if c.isdigit()])
+        num = int(string[:end])
+        return '{}{}'.format(fmt % num, string[end:])
+
+    @classmethod
+    def _parse(cls, string):
+        number = 0  # magnitude
+        offset = 0  # index where the unit starts
+        for c in string:
+            if c.isdigit():
+                number = number * 10 + int(c)
+                offset += 1
             else:
-                unit = ''
-                if counter == 0:
-                    unit = 'bit'
-                elif counter == 1:
-                    unit = 'kbit'
-                elif counter == 2:
-                    unit = 'mbit'
-                elif counter == 3:
-                    unit = 'gbit'
-                
-                return '{}{}'.format(int(r), unit)
-            
-            if counter > 3:
-                raise Exception('Bitrate limit exceeded')
+                break
+
+        unit = string[offset:].lower()
+        if unit in cls._unit_factors:
+            return number * cls._unit_factors[unit]
+        raise cls._invalid_exc(string)
+
+
+class BitRate(_ScaledValue):
+    _base = 1000
+    _units = ('bit', 'kbit', 'mbit', 'gbit')
+    _unit_factors = {'bit': 1, 'kbit': 1000, 'mbit': 1000 ** 2, 'gbit': 1000 ** 3}
+    _invalid_exc = InvalidBitRate
+
+    def __init__(self, rate=0):
+        super().__init__(rate)
+
+    @property
+    def rate(self):
+        return self._amount
 
     def __mul__(self, other):
         if isinstance(other, BitRate):
-            return BitRate(int(self.rate * other.rate))
-        return BitRate(int(self.rate * other))
-
-    def fmt(self, fmt):
-        string = self.__str__()
-        end = len([_ for _ in string if _.isdigit()])
-        num = int(string[:end])
-    
-        return '{}{}'.format(fmt % num, string[end:])
+            return BitRate(int(self._amount * other._amount))
+        return BitRate(int(self._amount * other))
 
     @classmethod
     def from_rate_string(cls, rate_string):
-        return cls(BitRate._bit_value(rate_string))
-
-    @staticmethod
-    def _bit_value(rate_string):
-        number = 0  # rate number
-        offset = 0  # string offset
-
-        for c in rate_string:
-            if c.isdigit():
-                number = number * 10 + int(c)
-                offset += 1
-            else:
-                break
-
-        unit = rate_string[offset:].lower()
-
-        if unit == 'bit':
-            return number
-        elif unit == 'kbit':
-            return number * 1000
-        elif unit == 'mbit':
-            return number * 1000 ** 2
-        elif unit == 'gbit':
-            return number * 1000 ** 3
-        else:
-            raise Exception('Invalid bitrate')
+        return cls(cls._parse(rate_string))
 
 
-class ByteValue(object):
+class ByteValue(_ScaledValue):
+    _base = 1024
+    _units = ('b', 'kb', 'mb', 'gb', 'tb')
+    _unit_factors = {'b': 1, 'kb': 1024, 'mb': 1024 ** 2, 'gb': 1024 ** 3, 'tb': 1024 ** 4}
+    _invalid_exc = InvalidByteValue
+
     def __init__(self, value=0):
-        self.value = value
+        super().__init__(value)
 
-    def __repr__(self):
-        return self.__str__()
-
-    def __str__(self):
-        counter = 0
-        v = self.value
-
-        while True:
-            if v >= 1024:
-                v /= 1024
-                counter += 1
-            else:
-                unit = ''
-                if counter == 0:
-                    unit = 'b'
-                elif counter == 1:
-                    unit = 'kb'
-                elif counter == 2:
-                    unit = 'mb'
-                elif counter == 3:
-                    unit = 'gb'
-                elif counter == 4:
-                    unit = 'tb'
-                
-                return '{}{}'.format(int(v), unit)
-
-            if counter > 4:
-                raise Exception('Byte value limit exceeded')
+    @property
+    def value(self):
+        return self._amount
 
     def __int__(self):
-        return self.value
+        return self._amount
 
     def __add__(self, other):
         if isinstance(other, ByteValue):
-            return ByteValue(int(self.value + other.value))
-        return ByteValue(int(self.value + other))
+            return ByteValue(int(self._amount + other._amount))
+        return ByteValue(int(self._amount + other))
 
     def __sub__(self, other):
         if isinstance(other, ByteValue):
-            return ByteValue(int(self.value - other.value))
-        return ByteValue(int(self.value - other))
+            return ByteValue(int(self._amount - other._amount))
+        return ByteValue(int(self._amount - other))
 
     def __mul__(self, other):
         if isinstance(other, ByteValue):
-            return ByteValue(int(self.value * other.value))
-        return ByteValue(int(self.value * other))
+            return ByteValue(int(self._amount * other._amount))
+        return ByteValue(int(self._amount * other))
 
     def __ge__(self, other):
         if isinstance(other, ByteValue):
-            return self.value >= other.value
-        return self.value >= other
-
-    def fmt(self, fmt):
-        string = self.__str__()
-        end = len([_ for _ in string if _.isdigit()])
-        num = int(string[:end])
-
-        return '{}{}'.format(fmt % num, string[end:])
+            return self._amount >= other._amount
+        return self._amount >= other
 
     @classmethod
     def from_byte_string(cls, byte_string):
-        return cls(ByteValue._byte_value(byte_string))
-
-    @staticmethod
-    def _byte_value(byte_string):
-        number = 0  # rate number
-        offset = 0  # string offset
-
-        for c in byte_string:
-            if c.isdigit():
-                number = number * 10 + int(c)
-                offset += 1
-            else:
-                break
-
-        unit = byte_string[offset:].lower()
-
-        if unit == 'b':
-            return number
-        elif unit == 'kb':
-            return number * 1024
-        elif unit == 'mb':
-            return number * 1024 ** 2
-        elif unit == 'gb':
-            return number * 1024 ** 3
-        elif unit == 'tb':
-            return number * 1024 ** 4
-        else:
-            raise Exception('Invalid byte string')
+        return cls(cls._parse(byte_string))

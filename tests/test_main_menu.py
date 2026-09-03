@@ -17,11 +17,13 @@ def _mock_menu(hosts):
     """
     menu = mock.Mock()
     menu._get_hosts_by_ids.return_value = hosts
+    menu._require_hosts.side_effect = lambda ids: MainMenu._require_hosts(menu, ids)
     menu._parse_direction_args.return_value = Direction.BOTH
     # pure (ignore menu state) - delegate to the real implementation so
     # limit-handler tests still exercise real rate parsing/formatting
     menu._parse_rate_args.side_effect = lambda rate_string, direction: MainMenu._parse_rate_args(menu, rate_string, direction)
     menu._pretty_rate.side_effect = lambda rate: MainMenu._pretty_rate(menu, rate)
+    menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(menu, host, action, err, verb)
     return menu
 
 
@@ -168,6 +170,7 @@ class FreeHostDiagnosticsTest(unittest.TestCase):
         host.spoofed = True
         menu = mock.Mock()
         menu.limiter.unlimit.side_effect = LimitApplyError(['tc filter delete'], Direction.BOTH)
+        menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(menu, host, action, err, verb)
 
         with mock.patch('evillimiter.menus.main_menu.IO') as io:
             MainMenu._free_host(menu, host)
@@ -232,6 +235,7 @@ class PrettyHostStatusTest(unittest.TestCase):
         self.host.limited = True
         self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH, {'delay': 100, 'loss': 5})
         self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+        self.menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(self.menu, host, action, err, verb)
 
         result = MainMenu._pretty_host_status(self.menu, self.host)
 
@@ -418,10 +422,12 @@ class NetemHandlerTest(unittest.TestCase):
         self.host = Host('192.168.1.3', 'aa:bb:cc:dd:ee:ff', '')
         self.menu = mock.Mock()
         self.menu._get_hosts_by_ids.return_value = [self.host]
+        self.menu._require_hosts.side_effect = lambda ids: MainMenu._require_hosts(self.menu, ids)
         # pure (ignores menu state) - delegate to the real implementation
         # so these tests still exercise real --delay/--loss validation
         self.menu._parse_netem_args.side_effect = lambda args: MainMenu._parse_netem_args(self.menu, args)
         self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+        self.menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(self.menu, host, action, err, verb)
 
     def test_applies_parsed_delay_and_loss(self):
         args = mock.Mock(id='0', clear=False, delay='100', loss='5')
@@ -486,6 +492,7 @@ class NetemHandlerTest(unittest.TestCase):
 
     def test_no_hosts_resolved_is_a_noop(self):
         self.menu._get_hosts_by_ids.return_value = None
+        self.menu._require_hosts.side_effect = lambda ids: MainMenu._require_hosts(self.menu, ids)
         args = mock.Mock(id='99', clear=False, delay='100', loss=None)
 
         MainMenu._netem_handler(self.menu, args)

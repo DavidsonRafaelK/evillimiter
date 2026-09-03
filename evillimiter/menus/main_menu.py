@@ -6,7 +6,7 @@ import threading
 import evillimiter.networking.utils as netutils
 from . import views
 from .menu import CommandMenu
-from evillimiter.networking.utils import BitRate
+from evillimiter.networking.utils import BitRate, InvalidBitRate
 from evillimiter.console.io import IO
 from evillimiter.console.banner import get_main_banner
 from evillimiter.networking.host import Host
@@ -39,7 +39,7 @@ class MainMenu(CommandMenu):
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.ndp_spoofer = NDPSpoofer(self.interface, netutils.get_default_gateway_ipv6())
         self.limiter = Limiter(self.interface)
-        self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
+        self.bandwidth_monitor = BandwidthMonitor(self.interface)
         self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
 
         if watch_interval is not None:
@@ -50,7 +50,7 @@ class MainMenu(CommandMenu):
             if parsed_range is not None:
                 self.host_watcher.iprange = parsed_range
             else:
-                IO.error('invalid watch range in config: {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, watch_range, IO.Style.RESET_ALL))
+                IO.error('invalid watch range in config: {}.'.format(IO.highlight(watch_range)))
 
         # holds discovered hosts
         self.hosts = []
@@ -153,8 +153,12 @@ class MainMenu(CommandMenu):
         self.arp_spoofer.stop()
         self.ndp_spoofer.stop()
         self.bandwidth_monitor.stop()
+        self.host_watcher.stop()
 
-        for host in self.hosts:
+        with self.hosts_lock:
+            hosts = self.hosts.copy()
+
+        for host in hosts:
             self._free_host(host)
 
     def _scan_handler(self, args):
@@ -190,7 +194,7 @@ class MainMenu(CommandMenu):
         self.hosts = hosts
         self.hosts_lock.release()
 
-        IO.ok('{}{}{} hosts discovered.'.format(IO.Fore.LIGHTYELLOW_EX, len(hosts), IO.Style.RESET_ALL))
+        IO.ok('{} hosts discovered.'.format(IO.highlight(len(hosts))))
         IO.spacer()
 
     def _hosts_handler(self, args):
@@ -199,15 +203,17 @@ class MainMenu(CommandMenu):
         Displays discovered hosts
         """
         with self.hosts_lock:
+            # host id is just the list index; enumerate instead of a
+            # per-row linear _get_host_id scan (was O(n^2) over the table)
             rows = [
                 (
-                    self._get_host_id(host, lock=False),
+                    index,
                     host.ip,
-                    host.mac,
+                    '{} (random)'.format(host.mac) if host.mac_is_randomized else host.mac,
                     host.name,
                     self._pretty_host_status(host)
                 )
-                for host in self.hosts
+                for index, host in enumerate(self.hosts)
             ]
 
         views.print_hosts_table(rows, args.force)
@@ -245,8 +251,8 @@ class MainMenu(CommandMenu):
         Handles 'limit' command-line argument
         Limits bandwith of host to specified rate
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         direction = self._parse_direction_args(args)
@@ -263,9 +269,9 @@ class MainMenu(CommandMenu):
             try:
                 self.limiter.limit(host, direction, rate)
             except LimitApplyError as e:
-                IO.error('{}{}{r} {} limit only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                self._report_partial(host, '{} limit'.format(Direction.pretty_direction(direction)), e)
             else:
-                IO.ok('{}{}{r} {} {}limited{r} to {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, self._pretty_rate(rate), r=IO.Style.RESET_ALL))
+                IO.ok('{} {} {}limited{r} to {}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, self._pretty_rate(rate), r=IO.Style.RESET_ALL))
 
             self.bandwidth_monitor.add(host)
 
@@ -274,25 +280,27 @@ class MainMenu(CommandMenu):
         Handles 'block' command-line argument
         Blocks internet communication for host
         """
-        hosts = self._get_hosts_by_ids(args.id)
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
+            return
+
         direction = self._parse_direction_args(args)
 
-        if hosts is not None and len(hosts) > 0:
-            for host in hosts:
-                if not host.spoofed:
-                    self.arp_spoofer.add(host)
+        for host in hosts:
+            if not host.spoofed:
+                self.arp_spoofer.add(host)
 
-                self.ndp_spoofer.add(host)
-                self.host_watcher.add(host)
+            self.ndp_spoofer.add(host)
+            self.host_watcher.add(host)
 
-                try:
-                    self.limiter.block(host, direction)
-                except LimitApplyError as e:
-                    IO.error('{}{}{r} {} block only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
-                else:
-                    IO.ok('{}{}{r} {} {}blocked{r}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
+            try:
+                self.limiter.block(host, direction)
+            except LimitApplyError as e:
+                self._report_partial(host, '{} block'.format(Direction.pretty_direction(direction)), e)
+            else:
+                IO.ok('{} {} {}blocked{r}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
-                self.bandwidth_monitor.add(host)
+            self.bandwidth_monitor.add(host)
 
     def _netem_handler(self, args):
         """
@@ -301,8 +309,8 @@ class MainMenu(CommandMenu):
         Attaches to whichever direction(s) the host is currently
         limited in - no separate direction of its own.
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         if args.clear:
@@ -310,9 +318,9 @@ class MainMenu(CommandMenu):
                 try:
                     self.limiter.clear_netem(host)
                 except LimitApplyError as e:
-                    IO.error('{}{}{r} netem clear only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                    self._report_partial(host, 'netem clear', e)
                 else:
-                    IO.ok('{}{}{r} netem cleared.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, r=IO.Style.RESET_ALL))
+                    IO.ok('{} netem cleared.'.format(IO.highlight(host.ip)))
             return
 
         parsed = self._parse_netem_args(args)
@@ -328,21 +336,23 @@ class MainMenu(CommandMenu):
             try:
                 self.limiter.set_netem(host, delay, loss)
             except NetemRequiresLimitError:
-                IO.error('{}{}{r} must be limited first (netem attaches to the existing rate class).'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, r=IO.Style.RESET_ALL))
+                IO.error('{} must be limited first (netem attaches to the existing rate class).'.format(IO.highlight(host.ip)))
             except LimitApplyError as e:
-                IO.error('{}{}{r} netem only partially applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                self._report_partial(host, 'netem', e)
             else:
-                IO.ok('{}{}{r} netem applied: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, self._pretty_netem({'delay': delay, 'loss': loss}), r=IO.Style.RESET_ALL))
+                IO.ok('{} netem applied: {}.'.format(IO.highlight(host.ip), self._pretty_netem({'delay': delay, 'loss': loss})))
 
     def _free_handler(self, args):
         """
         Handles 'free' command-line argument
         Frees the host from all limitations
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is not None and len(hosts) > 0:
-            for host in hosts:
-                self._free_host(host)
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
+            return
+
+        for host in hosts:
+            self._free_host(host)
 
     def _add_handler(self, args):
         """
@@ -411,8 +421,8 @@ class MainMenu(CommandMenu):
             IO.error('monitor error occurred. maybe terminal too small?')
 
     def _analyze_handler(self, args):
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             IO.error('no hosts to be analyzed.')
             return
         
@@ -464,8 +474,8 @@ class MainMenu(CommandMenu):
             upload_value = host_values[host]['current'][0] - host_values[host]['prev'][0]
             download_value = host_values[host]['current'][1] - host_values[host]['prev'][1]
 
-            prefix = '{}{}{} ({}, {})'.format(
-                IO.Fore.LIGHTYELLOW_EX, self._get_host_id(host), IO.Style.RESET_ALL,
+            prefix = '{} ({}, {})'.format(
+                IO.highlight(self._get_host_id(host)),
                 host.ip,
                 host.name
             )
@@ -498,8 +508,8 @@ class MainMenu(CommandMenu):
         Handles 'watch add' command-line argument
         Adds host to the reconnection watch list
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         for host in hosts:
@@ -510,8 +520,8 @@ class MainMenu(CommandMenu):
         Handles 'watch remove' command-line argument
         Removes host from the reconnection watch list
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         for host in hosts:
@@ -528,13 +538,13 @@ class MainMenu(CommandMenu):
                 self.host_watcher.iprange = iprange
             else:
                 IO.error('invalid ip range.')
-        elif args.attribute.lower() in ('interval'):
+        elif args.attribute.lower() == 'interval':
             if args.value.isdigit():
                 self.host_watcher.interval = int(args.value)
             else:
                 IO.error('invalid interval.')
         else:
-            IO.error('{}{}{} is an invalid settings attribute.'.format(IO.Fore.LIGHTYELLOW_EX, args.attribute, IO.Style.RESET_ALL))
+            IO.error('{} is an invalid settings attribute.'.format(IO.highlight(args.attribute)))
 
     def _reconnect_callback(self, old_host, new_host):
         """
@@ -558,9 +568,9 @@ class MainMenu(CommandMenu):
         try:
             self.limiter.replace(old_host, new_host)
         except LimitApplyError as e:
-            IO.error('{}{}{r} reconnected as {}{}{r}, but restriction reapply only partially succeeded: {}.'.format(IO.Fore.LIGHTYELLOW_EX, old_host.ip, IO.Fore.LIGHTYELLOW_EX, new_host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+            IO.error('{} reconnected as {}, but restriction reapply only partially succeeded: {}.'.format(IO.highlight(old_host.ip), IO.highlight(new_host.ip), ', '.join(e.failed_steps)))
         else:
-            IO.ok('{}{}{r} reconnected as {}{}{r}, restriction reapplied.'.format(IO.Fore.LIGHTYELLOW_EX, old_host.ip, IO.Fore.LIGHTYELLOW_EX, new_host.ip, r=IO.Style.RESET_ALL))
+            IO.ok('{} reconnected as {}, restriction reapplied.'.format(IO.highlight(old_host.ip), IO.highlight(new_host.ip)))
 
         self.bandwidth_monitor.replace(old_host, new_host)
 
@@ -603,6 +613,14 @@ class MainMenu(CommandMenu):
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
 
+    def _require_hosts(self, ids_string):
+        """
+        Resolves ids to hosts via _get_hosts_by_ids, returning None when
+        nothing matched (None or empty) so handlers share one guard.
+        """
+        hosts = self._get_hosts_by_ids(ids_string)
+        return hosts if hosts else None
+
     def _get_hosts_by_ids(self, ids_string):
         if ids_string == 'all':
             with self.hosts_lock:
@@ -629,12 +647,12 @@ class MainMenu(CommandMenu):
                             hosts.add(host)
                             break
                     if not found:
-                        IO.error('no host matching {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                        IO.error('no host matching {}.'.format(IO.highlight(id_)))
                         return
                 else:
                     id_ = int(id_)
                     if len(self.hosts) == 0 or id_ not in range(len(self.hosts)):
-                        IO.error('no host with id {}{}{}.'.format(IO.Fore.LIGHTYELLOW_EX, id_, IO.Style.RESET_ALL))
+                        IO.error('no host with id {}.'.format(IO.highlight(id_)))
                         return
                     hosts.add(self.hosts[id_])
 
@@ -678,7 +696,7 @@ class MainMenu(CommandMenu):
         if '/' not in rate_string:
             try:
                 return BitRate.from_rate_string(rate_string)
-            except Exception:
+            except InvalidBitRate:
                 IO.error('limit rate is invalid.')
                 return None
 
@@ -693,7 +711,7 @@ class MainMenu(CommandMenu):
 
         try:
             return tuple(BitRate.from_rate_string(part) for part in parts)
-        except Exception:
+        except InvalidBitRate:
             IO.error('limit rate is invalid.')
             return None
 
@@ -734,12 +752,14 @@ class MainMenu(CommandMenu):
         Formats a {'delay':.., 'loss':..} netem dict (as returned by
         Limiter.info()) for display, e.g. 'delay 100ms, loss 5%'.
         """
-        parts = []
-        if netem.get('delay') is not None:
-            parts.append('delay {}ms'.format(netem['delay']))
-        if netem.get('loss') is not None:
-            parts.append('loss {}%'.format(netem['loss']))
-        return ', '.join(parts)
+        return netutils.format_netem(netem.get('delay'), netem.get('loss'), sep=', ')
+
+    def _report_partial(self, host, action, err, verb='applied'):
+        """
+        Single place for the "only partially applied/succeeded"
+        LimitApplyError message shared by limit/block/netem/free.
+        """
+        IO.error('{} {} only partially {}: {}.'.format(IO.highlight(host.ip), action, verb, ', '.join(err.failed_steps)))
 
     def _free_host(self, host):
         """
@@ -756,7 +776,7 @@ class MainMenu(CommandMenu):
                 # helper also runs during rescan/shutdown cleanup, where
                 # a raised exception would skip the remaining teardown
                 # steps below for every other host, not just this one
-                IO.error('{}{}{r} restriction removal only partially succeeded: {}.'.format(IO.Fore.LIGHTYELLOW_EX, host.ip, ', '.join(e.failed_steps), r=IO.Style.RESET_ALL))
+                self._report_partial(host, 'restriction removal', e, verb='succeeded')
 
             self.bandwidth_monitor.remove(host)
             self.host_watcher.remove(host)

@@ -3,9 +3,10 @@ import threading
 from scapy.all import sniff, IP # pylint: disable=no-name-in-module
 
 from .utils import ValueConverter, BitRate, ByteValue
+from .worker import BackgroundWorker
 
 
-class BandwidthMonitor(object):
+class BandwidthMonitor(BackgroundWorker):
     class BandwidthMonitorResult(object):
         def __init__(self):
             self.upload_rate = BitRate()
@@ -18,13 +19,12 @@ class BandwidthMonitor(object):
             self._upload_temp_size = ByteValue()
             self._download_temp_size = ByteValue()
 
-    def __init__(self, interface, interval):
+    def __init__(self, interface):
+        BackgroundWorker.__init__(self)
         self.interface = interface
 
         self._host_result_dict = {}
         self._host_result_lock = threading.Lock()
-
-        self._running = False
 
     def add(self, host):
         with self._host_result_lock:
@@ -44,23 +44,16 @@ class BandwidthMonitor(object):
                 # the entry it was meant to carry over
                 self._host_result_dict[new_host] = self._host_result_dict.pop(old_host)
 
-    def start(self):
-        if self._running:
-            return
-
-        sniff_thread = threading.Thread(target=self._sniff, args=[], daemon=True)
-        sniff_thread.start()
-
-        self._running = True
-
-    def stop(self):
-        self._running = False
+    def _worker_targets(self):
+        return [self._sniff]
 
     def get(self, host):
         with self._host_result_lock:
             if host in self._host_result_dict:
                 last_now = self._host_result_dict[host]['last_now']
                 time_passed = time.time() - last_now
+                if time_passed <= 0:
+                    time_passed = 1e-6
                 result = self._host_result_dict[host]['result']
                 result.upload_rate = BitRate(int(ValueConverter.byte_to_bit(result._upload_temp_size.value) / time_passed))
                 result.download_rate = BitRate(int(ValueConverter.byte_to_bit(result._download_temp_size.value) / time_passed))
