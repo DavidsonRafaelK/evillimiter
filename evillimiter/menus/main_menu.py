@@ -153,8 +153,12 @@ class MainMenu(CommandMenu):
         self.arp_spoofer.stop()
         self.ndp_spoofer.stop()
         self.bandwidth_monitor.stop()
+        self.host_watcher.stop()
 
-        for host in self.hosts:
+        with self.hosts_lock:
+            hosts = self.hosts.copy()
+
+        for host in hosts:
             self._free_host(host)
 
     def _scan_handler(self, args):
