@@ -203,15 +203,17 @@ class MainMenu(CommandMenu):
         Displays discovered hosts
         """
         with self.hosts_lock:
+            # host id is just the list index; enumerate instead of a
+            # per-row linear _get_host_id scan (was O(n^2) over the table)
             rows = [
                 (
-                    self._get_host_id(host, lock=False),
+                    index,
                     host.ip,
                     host.mac,
                     host.name,
                     self._pretty_host_status(host)
                 )
-                for host in self.hosts
+                for index, host in enumerate(self.hosts)
             ]
 
         views.print_hosts_table(rows, args.force)
