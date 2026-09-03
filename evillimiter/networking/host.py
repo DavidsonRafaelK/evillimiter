@@ -1,4 +1,5 @@
 from evillimiter.console.io import IO
+from . import utils
 
 
 class Host(object):
@@ -16,6 +17,15 @@ class Host(object):
 
     def __hash__(self):
         return hash(self.mac)
+
+    @property
+    def mac_is_randomized(self):
+        """
+        True when this host's MAC looks randomized/locally-administered
+        (see utils.is_locally_administered_mac). Such a device reappears
+        as a new host on reconnect - see README Restrictions.
+        """
+        return utils.is_locally_administered_mac(self.mac)
 
     def reconnected_as(self, other):
         """

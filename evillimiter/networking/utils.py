@@ -251,6 +251,21 @@ def validate_mac_address(mac):
     return re.match(r'^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$', mac) is not None
 
 
+def is_locally_administered_mac(mac):
+    """
+    True if the MAC's locally-administered (U/L) bit is set (0x02 in the
+    first octet). A set U/L bit strongly indicates a randomized/private
+    address (default per-network-join behavior on modern Android/iOS)
+    rather than a manufacturer-assigned OUI - see the README's
+    Restrictions section on MAC randomization.
+    """
+    try:
+        first_octet = int(mac.split(':')[0], 16)
+    except (AttributeError, ValueError, IndexError):
+        return False
+    return bool(first_octet & 0x02)
+
+
 def create_qdisc_root(interface):
     """
     Creates a root htb qdisc in traffic control for a given interface

@@ -10,6 +10,7 @@ from evillimiter.networking.utils import (
     get_mdns_name,
     get_default_gateway_ipv6,
     get_interface_mac,
+    is_locally_administered_mac,
     _read_dns_name,
     ValueConverter,
     BitRate,
@@ -145,6 +146,21 @@ class ByteValueFromStringTest(unittest.TestCase):
     def test_invalid_unit_raises(self):
         with self.assertRaises(Exception):
             ByteValue.from_byte_string('6pb')
+
+
+class IsLocallyAdministeredMacTest(unittest.TestCase):
+    def test_detects_locally_administered_bit(self):
+        # U/L bit (0x02) set in the first octet
+        self.assertTrue(is_locally_administered_mac('02:11:22:33:44:55'))
+        self.assertTrue(is_locally_administered_mac('AA:BB:CC:DD:EE:FF'))
+
+    def test_universally_administered_mac_is_not_flagged(self):
+        # real OUI, U/L bit clear
+        self.assertFalse(is_locally_administered_mac('1c:fc:bc:2d:a6:37'))
+
+    def test_malformed_mac_is_not_flagged(self):
+        self.assertFalse(is_locally_administered_mac('not-a-mac'))
+        self.assertFalse(is_locally_administered_mac(''))
 
 
 class GetHostnameTest(unittest.TestCase):
