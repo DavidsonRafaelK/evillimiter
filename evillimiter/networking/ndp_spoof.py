@@ -1,11 +1,11 @@
 import time
-import threading
 from scapy.all import Ether, IPv6, ICMPv6ND_NA, ICMPv6ND_NS, ICMPv6NDOptDstLLAddr, sendp, sniff # pylint: disable=no-name-in-module
 
 from . import utils
+from .worker import BackgroundWorker, HostTracker
 
 
-class NDPSpoofer(object):
+class NDPSpoofer(BackgroundWorker, HostTracker):
     """
     IPv6 counterpart to ARPSpoofer. IPv4-only ARP spoofing has no effect
     on a host's IPv6 traffic, so on any network with a working IPv6
@@ -33,6 +33,8 @@ class NDPSpoofer(object):
     A no-op if the network has no IPv6 default route.
     """
     def __init__(self, interface, gateway_ip6):
+        BackgroundWorker.__init__(self)
+        HostTracker.__init__(self)
         self.interface = interface
         self.gateway_ip6 = gateway_ip6
 
@@ -40,9 +42,6 @@ class NDPSpoofer(object):
         self.interval = 2
 
         self._own_mac = utils.get_interface_mac(interface)
-        self._hosts = set()
-        self._hosts_lock = threading.Lock()
-        self._running = False
 
     def add(self, host):
         with self._hosts_lock:
@@ -52,23 +51,15 @@ class NDPSpoofer(object):
         with self._hosts_lock:
             self._hosts.discard(host)
 
-    def start(self):
-        if self.gateway_ip6 is None or self._running:
-            return
+    def _can_start(self):
+        return self.gateway_ip6 is not None
 
-        self._running = True
-        threading.Thread(target=self._spoof, args=[], daemon=True).start()
-        threading.Thread(target=self._listen, args=[], daemon=True).start()
-
-    def stop(self):
-        self._running = False
+    def _worker_targets(self):
+        return [self._spoof, self._listen]
 
     def _spoof(self):
         while self._running:
-            with self._hosts_lock:
-                hosts = self._hosts.copy()
-
-            for host in hosts:
+            for host in self._snapshot_hosts():
                 if not self._running:
                     return
 
