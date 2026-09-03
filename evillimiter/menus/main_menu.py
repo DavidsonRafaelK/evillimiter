@@ -251,8 +251,8 @@ class MainMenu(CommandMenu):
         Handles 'limit' command-line argument
         Limits bandwith of host to specified rate
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         direction = self._parse_direction_args(args)
@@ -280,25 +280,27 @@ class MainMenu(CommandMenu):
         Handles 'block' command-line argument
         Blocks internet communication for host
         """
-        hosts = self._get_hosts_by_ids(args.id)
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
+            return
+
         direction = self._parse_direction_args(args)
 
-        if hosts is not None and len(hosts) > 0:
-            for host in hosts:
-                if not host.spoofed:
-                    self.arp_spoofer.add(host)
+        for host in hosts:
+            if not host.spoofed:
+                self.arp_spoofer.add(host)
 
-                self.ndp_spoofer.add(host)
-                self.host_watcher.add(host)
+            self.ndp_spoofer.add(host)
+            self.host_watcher.add(host)
 
-                try:
-                    self.limiter.block(host, direction)
-                except LimitApplyError as e:
-                    self._report_partial(host, '{} block'.format(Direction.pretty_direction(direction)), e)
-                else:
-                    IO.ok('{} {} {}blocked{r}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
+            try:
+                self.limiter.block(host, direction)
+            except LimitApplyError as e:
+                self._report_partial(host, '{} block'.format(Direction.pretty_direction(direction)), e)
+            else:
+                IO.ok('{} {} {}blocked{r}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
-                self.bandwidth_monitor.add(host)
+            self.bandwidth_monitor.add(host)
 
     def _netem_handler(self, args):
         """
@@ -307,8 +309,8 @@ class MainMenu(CommandMenu):
         Attaches to whichever direction(s) the host is currently
         limited in - no separate direction of its own.
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         if args.clear:
@@ -345,10 +347,12 @@ class MainMenu(CommandMenu):
         Handles 'free' command-line argument
         Frees the host from all limitations
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is not None and len(hosts) > 0:
-            for host in hosts:
-                self._free_host(host)
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
+            return
+
+        for host in hosts:
+            self._free_host(host)
 
     def _add_handler(self, args):
         """
@@ -417,8 +421,8 @@ class MainMenu(CommandMenu):
             IO.error('monitor error occurred. maybe terminal too small?')
 
     def _analyze_handler(self, args):
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             IO.error('no hosts to be analyzed.')
             return
         
@@ -504,8 +508,8 @@ class MainMenu(CommandMenu):
         Handles 'watch add' command-line argument
         Adds host to the reconnection watch list
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         for host in hosts:
@@ -516,8 +520,8 @@ class MainMenu(CommandMenu):
         Handles 'watch remove' command-line argument
         Removes host from the reconnection watch list
         """
-        hosts = self._get_hosts_by_ids(args.id)
-        if hosts is None or len(hosts) == 0:
+        hosts = self._require_hosts(args.id)
+        if hosts is None:
             return
 
         for host in hosts:
@@ -608,6 +612,14 @@ class MainMenu(CommandMenu):
 
     def _print_help_reminder(self):
         IO.print('type {Y}help{R} or {Y}?{R} to show command information.'.format(Y=IO.Fore.LIGHTYELLOW_EX, R=IO.Style.RESET_ALL))
+
+    def _require_hosts(self, ids_string):
+        """
+        Resolves ids to hosts via _get_hosts_by_ids, returning None when
+        nothing matched (None or empty) so handlers share one guard.
+        """
+        hosts = self._get_hosts_by_ids(ids_string)
+        return hosts if hosts else None
 
     def _get_hosts_by_ids(self, ids_string):
         if ids_string == 'all':
