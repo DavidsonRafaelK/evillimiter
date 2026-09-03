@@ -65,20 +65,25 @@ class Limiter(object):
             entry = self._host_dict.get(host)
         return None if entry is None else (entry['rate'], entry['direction'], entry.get('netem'))
 
+    def _direction_meta(self, single_direction):
+        """
+        Static per-direction attributes shared by every tc/iptables
+        command: (label, iptables source/dest flag, mangle MARK chain,
+        host<->this-machine DROP chain).
+        """
+        if single_direction == Direction.OUTGOING:
+            return 'upload', '-s', 'POSTROUTING', 'INPUT'
+        return 'download', '-d', 'PREROUTING', 'OUTPUT'
+
     def _iter_directions(self, direction):
         """
         Yields (single_direction, label, flag, mangle_chain, local_chain)
         for each direction present in `direction`, replacing the repeated
-        `(direction & X) == X` guards. `flag` is the iptables source/dest
-        selector, `mangle_chain` the MARK chain, `local_chain` the
-        host<->this-machine DROP chain.
+        `(direction & X) == X` guards.
         """
-        meta = (
-            (Direction.OUTGOING, 'upload', '-s', 'POSTROUTING', 'INPUT'),
-            (Direction.INCOMING, 'download', '-d', 'PREROUTING', 'OUTPUT'),
-        )
-        for single, label, flag, mangle_chain, local_chain in meta:
+        for single in (Direction.OUTGOING, Direction.INCOMING):
             if (direction & single) == single:
+                label, flag, mangle_chain, local_chain = self._direction_meta(single)
                 yield single, label, flag, mangle_chain, local_chain
 
     def _id_for_direction(self, host_ids, single_direction):
@@ -350,13 +355,10 @@ class Limiter(object):
         """
         Deletes the mangle MARK rule limit() adds for one direction
         """
+        label, flag, mangle_chain, _ = self._direction_meta(single_direction)
         failed = []
-        if single_direction == Direction.OUTGOING:
-            if not self._run('{} -t mangle -D POSTROUTING -s {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_)):
-                failed.append('iptables mark delete (upload)')
-        else:
-            if not self._run('{} -t mangle -D PREROUTING -d {} -j MARK --set-mark {}'.format(BIN_IPTABLES, host.ip, id_)):
-                failed.append('iptables mark delete (download)')
+        if not self._run('{} -t mangle -D {chain} {flag} {ip} -j MARK --set-mark {id}'.format(BIN_IPTABLES, chain=mangle_chain, flag=flag, ip=host.ip, id=id_)):
+            failed.append('iptables mark delete ({})'.format(label))
         return failed
 
     def _delete_iptables_drop_entries(self, host, single_direction):
@@ -364,17 +366,12 @@ class Limiter(object):
         Deletes the FORWARD/INPUT/OUTPUT DROP rules block() adds for
         one direction
         """
+        label, flag, _, local_chain = self._direction_meta(single_direction)
         failed = []
-        if single_direction == Direction.OUTGOING:
-            if not self._run('{} -t filter -D FORWARD -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables forward drop delete (upload)')
-            if not self._run('{} -t filter -D INPUT -s {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables input drop delete (upload)')
-        else:
-            if not self._run('{} -t filter -D FORWARD -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables forward drop delete (download)')
-            if not self._run('{} -t filter -D OUTPUT -d {} -j DROP'.format(BIN_IPTABLES, host.ip)):
-                failed.append('iptables output drop delete (download)')
+        if not self._run('{} -t filter -D FORWARD {flag} {ip} -j DROP'.format(BIN_IPTABLES, flag=flag, ip=host.ip)):
+            failed.append('iptables forward drop delete ({})'.format(label))
+        if not self._run('{} -t filter -D {chain} {flag} {ip} -j DROP'.format(BIN_IPTABLES, chain=local_chain, flag=flag, ip=host.ip)):
+            failed.append('iptables {} drop delete ({})'.format(local_chain.lower(), label))
         return failed
 
 
