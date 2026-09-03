@@ -39,7 +39,7 @@ class MainMenu(CommandMenu):
         self.arp_spoofer = ARPSpoofer(self.interface, self.gateway_ip, self.gateway_mac)
         self.ndp_spoofer = NDPSpoofer(self.interface, netutils.get_default_gateway_ipv6())
         self.limiter = Limiter(self.interface)
-        self.bandwidth_monitor = BandwidthMonitor(self.interface, 1)
+        self.bandwidth_monitor = BandwidthMonitor(self.interface)
         self.host_watcher = HostWatcher(self.host_scanner, self._reconnect_callback)
 
         if watch_interval is not None:

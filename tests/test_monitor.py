@@ -14,7 +14,7 @@ class BandwidthMonitorReplaceTest(unittest.TestCase):
     entry it just wrote, since both keys refer to the same slot.
     """
     def test_replace_carries_result_to_new_host(self):
-        monitor = BandwidthMonitor('eth0', 1)
+        monitor = BandwidthMonitor('eth0')
         old_host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'phone')
         new_host = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'phone')
 
@@ -27,7 +27,7 @@ class BandwidthMonitorReplaceTest(unittest.TestCase):
         self.assertIs(monitor._host_result_dict[new_host], result_before)
 
     def test_replace_is_noop_when_old_host_untracked(self):
-        monitor = BandwidthMonitor('eth0', 1)
+        monitor = BandwidthMonitor('eth0')
         old_host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'phone')
         new_host = Host('192.168.1.9', 'aa:bb:cc:dd:ee:ff', 'phone')
 
@@ -40,7 +40,7 @@ class BandwidthMonitorReplaceTest(unittest.TestCase):
 class BandwidthMonitorGetTest(unittest.TestCase):
     def test_get_survives_zero_elapsed_time(self):
         import time
-        monitor = BandwidthMonitor('eth0', 1)
+        monitor = BandwidthMonitor('eth0')
         host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'phone')
         monitor.add(host)
         # force non-positive elapsed time (last_now in the future),
