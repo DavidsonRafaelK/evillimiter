@@ -209,7 +209,7 @@ class MainMenu(CommandMenu):
                 (
                     index,
                     host.ip,
-                    host.mac,
+                    '{} (random)'.format(host.mac) if host.mac_is_randomized else host.mac,
                     host.name,
                     self._pretty_host_status(host)
                 )
