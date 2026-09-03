@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/logo.png" alt="Evil Limiter" width="500" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/logo.jpeg" alt="Evil Limiter" width="500" /></p>
 
 # Evil Limiter
 
@@ -63,8 +63,6 @@ Alternatively, you can download a desired version from the [Release page](https:
 Type ```evillimiter``` or ```python3 bin/evillimiter``` to run the tool.
 
 ```evillimiter``` will try to resolve required information (network interface, netmask, gateway address, ...) on its own, automatically.
-
-<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/screenshot.png" alt="evillimiter running in a terminal" width="800" /></p>
 
 #### Command-Line Arguments
 
