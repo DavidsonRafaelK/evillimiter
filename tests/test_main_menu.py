@@ -22,6 +22,7 @@ def _mock_menu(hosts):
     # limit-handler tests still exercise real rate parsing/formatting
     menu._parse_rate_args.side_effect = lambda rate_string, direction: MainMenu._parse_rate_args(menu, rate_string, direction)
     menu._pretty_rate.side_effect = lambda rate: MainMenu._pretty_rate(menu, rate)
+    menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(menu, host, action, err, verb)
     return menu
 
 
@@ -168,6 +169,7 @@ class FreeHostDiagnosticsTest(unittest.TestCase):
         host.spoofed = True
         menu = mock.Mock()
         menu.limiter.unlimit.side_effect = LimitApplyError(['tc filter delete'], Direction.BOTH)
+        menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(menu, host, action, err, verb)
 
         with mock.patch('evillimiter.menus.main_menu.IO') as io:
             MainMenu._free_host(menu, host)
@@ -232,6 +234,7 @@ class PrettyHostStatusTest(unittest.TestCase):
         self.host.limited = True
         self.menu.limiter.info.return_value = (BitRate(1000), Direction.BOTH, {'delay': 100, 'loss': 5})
         self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+        self.menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(self.menu, host, action, err, verb)
 
         result = MainMenu._pretty_host_status(self.menu, self.host)
 
@@ -422,6 +425,7 @@ class NetemHandlerTest(unittest.TestCase):
         # so these tests still exercise real --delay/--loss validation
         self.menu._parse_netem_args.side_effect = lambda args: MainMenu._parse_netem_args(self.menu, args)
         self.menu._pretty_netem.side_effect = lambda netem: MainMenu._pretty_netem(self.menu, netem)
+        self.menu._report_partial.side_effect = lambda host, action, err, verb='applied': MainMenu._report_partial(self.menu, host, action, err, verb)
 
     def test_applies_parsed_delay_and_loss(self):
         args = mock.Mock(id='0', clear=False, delay='100', loss='5')

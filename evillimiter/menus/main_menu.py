@@ -269,7 +269,7 @@ class MainMenu(CommandMenu):
             try:
                 self.limiter.limit(host, direction, rate)
             except LimitApplyError as e:
-                IO.error('{} {} limit only partially applied: {}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), ', '.join(e.failed_steps)))
+                self._report_partial(host, '{} limit'.format(Direction.pretty_direction(direction)), e)
             else:
                 IO.ok('{} {} {}limited{r} to {}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.LIGHTRED_EX, self._pretty_rate(rate), r=IO.Style.RESET_ALL))
 
@@ -294,7 +294,7 @@ class MainMenu(CommandMenu):
                 try:
                     self.limiter.block(host, direction)
                 except LimitApplyError as e:
-                    IO.error('{} {} block only partially applied: {}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), ', '.join(e.failed_steps)))
+                    self._report_partial(host, '{} block'.format(Direction.pretty_direction(direction)), e)
                 else:
                     IO.ok('{} {} {}blocked{r}.'.format(IO.highlight(host.ip), Direction.pretty_direction(direction), IO.Fore.RED, r=IO.Style.RESET_ALL))
 
@@ -316,7 +316,7 @@ class MainMenu(CommandMenu):
                 try:
                     self.limiter.clear_netem(host)
                 except LimitApplyError as e:
-                    IO.error('{} netem clear only partially applied: {}.'.format(IO.highlight(host.ip), ', '.join(e.failed_steps)))
+                    self._report_partial(host, 'netem clear', e)
                 else:
                     IO.ok('{} netem cleared.'.format(IO.highlight(host.ip)))
             return
@@ -336,7 +336,7 @@ class MainMenu(CommandMenu):
             except NetemRequiresLimitError:
                 IO.error('{} must be limited first (netem attaches to the existing rate class).'.format(IO.highlight(host.ip)))
             except LimitApplyError as e:
-                IO.error('{} netem only partially applied: {}.'.format(IO.highlight(host.ip), ', '.join(e.failed_steps)))
+                self._report_partial(host, 'netem', e)
             else:
                 IO.ok('{} netem applied: {}.'.format(IO.highlight(host.ip), self._pretty_netem({'delay': delay, 'loss': loss})))
 
@@ -747,6 +747,13 @@ class MainMenu(CommandMenu):
             parts.append('loss {}%'.format(netem['loss']))
         return ', '.join(parts)
 
+    def _report_partial(self, host, action, err, verb='applied'):
+        """
+        Single place for the "only partially applied/succeeded"
+        LimitApplyError message shared by limit/block/netem/free.
+        """
+        IO.error('{} {} only partially {}: {}.'.format(IO.highlight(host.ip), action, verb, ', '.join(err.failed_steps)))
+
     def _free_host(self, host):
         """
         Stops ARP spoofing and unlimits host
@@ -762,7 +769,7 @@ class MainMenu(CommandMenu):
                 # helper also runs during rescan/shutdown cleanup, where
                 # a raised exception would skip the remaining teardown
                 # steps below for every other host, not just this one
-                IO.error('{} restriction removal only partially succeeded: {}.'.format(IO.highlight(host.ip), ', '.join(e.failed_steps)))
+                self._report_partial(host, 'restriction removal', e, verb='succeeded')
 
             self.bandwidth_monitor.remove(host)
             self.host_watcher.remove(host)
