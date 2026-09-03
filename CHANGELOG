@@ -1,5 +1,18 @@
 [ CHANGELOG ]
 
+[ v1.8.0 ]
+- Randomized (locally-administered) MAC addresses are flagged as "(random)" in the `hosts` table, so a device likely to reappear under a new identity is visible
+- CI now also runs on Python 3.14; declared support raised to Python 3.9+ (classifiers and requires-python aligned with what CI actually verifies)
+- Fixed `watch set interval` accepting any substring of "interval" (a string-membership bug that also silently accepted invalid attributes)
+- Fixed `locate_bin` returning None on a missing tc/iptables/sysctl binary (which produced malformed "None ..." commands); it now fails fast, and the `which` probe no longer runs under sudo
+- Fixed a possible ZeroDivisionError in the bandwidth monitor when two reads land in the same instant
+- Fixed shutdown cleanup iterating the discovered-host list without its lock (a race with the reconnect watcher)
+- Fixed `BarChart` rendering to return empty output instead of raising on empty data
+- Replaced a leaked module-level /dev/null file handle with subprocess.DEVNULL
+- Rate-parse failures now raise specific exceptions instead of being swallowed by a broad `except`
+- Internal refactors reducing duplication with no behavior change: BitRate/ByteValue base class, the limiter's direction/teardown branches, background-thread scaffolding, netem formatting, host-id/handler guards, and a shared yellow-highlight helper
+
+
 [ v1.7.0 ]
 - Shell command history persisted across sessions, navigable with the arrow keys
 - `hosts` table now shows the assigned rate/direction for limited/blocked hosts, instead of just "Limited"/"Blocked"

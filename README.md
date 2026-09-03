@@ -3,7 +3,7 @@
 # Evil Limiter
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.7+-brightgreen.svg)](pyproject.toml)
+[![Python](https://img.shields.io/badge/python-3.9+-brightgreen.svg)](pyproject.toml)
 [![CI](https://github.com/DavidsonRafaelK/evillimiter/actions/workflows/tests.yml/badge.svg)](https://github.com/DavidsonRafaelK/evillimiter/actions/workflows/tests.yml)
 [![Latest release](https://img.shields.io/github/v/release/DavidsonRafaelK/evillimiter)](https://github.com/DavidsonRafaelK/evillimiter/releases)
 [![Last commit](https://img.shields.io/github/last-commit/DavidsonRafaelK/evillimiter)](https://github.com/DavidsonRafaelK/evillimiter/commits/master)
@@ -30,7 +30,7 @@ Check out the open-source alternative [EvilLimiter for Windows](https://github.c
 
 ## Requirements
 - Linux distribution
-- Python 3.7 or newer
+- Python 3.9 or newer
 
 Possibly missing python packages will be installed during the installation process.
 

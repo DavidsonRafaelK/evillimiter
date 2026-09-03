@@ -7,7 +7,7 @@ By participating in this project you agree to follow the [Code of Conduct](CODE_
 ## Ground rules
 
 - **Scope**: Evil Limiter is a defensive/educational network administration tool. Only propose changes that help someone monitor, analyze, or limit bandwidth on a network they own or are authorized to manage. Features aimed at evading detection, attacking third-party networks, or otherwise abusing the tool will not be merged.
-- **Platform**: the project targets Linux with Python 3.7+. Don't add hard dependencies on other operating systems.
+- **Platform**: the project targets Linux with Python 3.9+. Don't add hard dependencies on other operating systems.
 - **No secrets**: never commit credentials, API keys, real IP/MAC addresses beyond documentation examples, or other sensitive data.
 - **Licensing**: contributions are accepted under the project's [MIT License](LICENSE). By opening a pull request you agree your contribution is licensed under the same terms.
 - **One topic per change**: keep issues and pull requests focused on a single bug, feature, or question. Unrelated changes make review slower and history harder to follow.
@@ -57,7 +57,7 @@ Do not open a public issue for a security vulnerability. Follow the reporting pr
    python3 -m unittest discover tests
    ```
    CI runs this same command on every push/PR against `master` (Python
-   3.9 and 3.12) — a red check blocks review either way, so it's faster
+   3.9, 3.12 and 3.14) — a red check blocks review either way, so it's faster
    to catch failures locally first.
 7. **Update documentation.** If your change adds/modifies a command, flag, or user-visible behavior, update `README.md` (and `CHANGELOG.md` if the project is tracking one for the next release).
 8. **Write a clear commit history.** Commit messages should explain *why*, not just *what*. Squash trivial fixup commits before opening the PR.

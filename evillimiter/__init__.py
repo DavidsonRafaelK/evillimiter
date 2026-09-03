@@ -13,5 +13,5 @@ logging.getLogger('scapy.runtime').setLevel(logging.ERROR)
 # routing table already selects the correct interface, so drop the noise.
 warnings.filterwarnings('ignore', message=r".*'iface' has no effect on L3 I/O.*")
 
-__version__ = '1.7.0'
+__version__ = '1.8.0'
 __description__ = 'Monitors, analyzes and limits the bandwidth of devices on the local network'
