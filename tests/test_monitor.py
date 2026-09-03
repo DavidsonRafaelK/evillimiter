@@ -43,7 +43,8 @@ class BandwidthMonitorGetTest(unittest.TestCase):
         monitor = BandwidthMonitor('eth0', 1)
         host = Host('192.168.1.5', 'aa:bb:cc:dd:ee:ff', 'phone')
         monitor.add(host)
-        # force zero elapsed time between add() and get()
+        # force non-positive elapsed time (last_now in the future),
+        # exercising the <= 0 guard
         monitor._host_result_dict[host]['last_now'] = time.time() + 1
         # must not raise ZeroDivisionError
         self.assertIsNotNone(monitor.get(host))
