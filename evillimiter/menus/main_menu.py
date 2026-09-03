@@ -528,7 +528,7 @@ class MainMenu(CommandMenu):
                 self.host_watcher.iprange = iprange
             else:
                 IO.error('invalid ip range.')
-        elif args.attribute.lower() in ('interval'):
+        elif args.attribute.lower() == 'interval':
             if args.value.isdigit():
                 self.host_watcher.interval = int(args.value)
             else:
