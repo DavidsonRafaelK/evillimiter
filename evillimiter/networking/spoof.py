@@ -1,13 +1,15 @@
 import time
-import threading
 from scapy.all import ARP, send # pylint: disable=no-name-in-module
 
 from .host import Host
+from .worker import BackgroundWorker, HostTracker
 from evillimiter.common.globals import BROADCAST
 
 
-class ARPSpoofer(object):
+class ARPSpoofer(BackgroundWorker, HostTracker):
     def __init__(self, interface, gateway_ip, gateway_mac):
+        BackgroundWorker.__init__(self)
+        HostTracker.__init__(self)
         self.interface = interface
         self.gateway_ip = gateway_ip
         self.gateway_mac = gateway_mac
@@ -15,17 +17,13 @@ class ARPSpoofer(object):
         # interval in s spoofed ARP packets are sent to targets
         self.interval = 2
 
-        self._hosts = set()
-        self._hosts_lock = threading.Lock()
-        self._running = False
-
     def add(self, host):
         with self._hosts_lock:
             self._hosts.add(host)
 
         host.spoofed = True
 
-    def remove(self, host, restore=True):             
+    def remove(self, host, restore=True):
         with self._hosts_lock:
             self._hosts.discard(host)
 
@@ -34,28 +32,17 @@ class ARPSpoofer(object):
 
         host.spoofed = False
 
-    def start(self):
-        thread = threading.Thread(target=self._spoof, args=[], daemon=True)
-
-        self._running = True
-        thread.start()
-
-    def stop(self):
-        self._running = False
+    def _worker_targets(self):
+        return [self._spoof]
 
     def _spoof(self):
         while self._running:
-            self._hosts_lock.acquire()
-            # make a deep copy to reduce lock time
-            hosts = self._hosts.copy()
-            self._hosts_lock.release()
-
-            for host in hosts:
+            for host in self._snapshot_hosts():
                 if not self._running:
                     return
 
                 self._send_spoofed_packets(host)
-            
+
             time.sleep(self.interval)
 
     def _send_spoofed_packets(self, host):

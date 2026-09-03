@@ -1,8 +1,10 @@
 import threading
 from scapy.all import sniff, DHCP, Ether # pylint: disable=no-name-in-module
 
+from .worker import BackgroundWorker
 
-class DHCPHostnameListener(object):
+
+class DHCPHostnameListener(BackgroundWorker):
     """
     Passively listens for DHCP traffic on the interface and records
     the hostname a device announces via option 12 ('host-name') when
@@ -16,26 +18,18 @@ class DHCPHostnameListener(object):
     until its next renewal.
     """
     def __init__(self, interface):
+        BackgroundWorker.__init__(self)
         self.interface = interface
 
         self._hostnames = {}  # mac (lowercase) -> hostname
         self._hostnames_lock = threading.Lock()
-        self._running = False
 
     def get(self, mac):
         with self._hostnames_lock:
             return self._hostnames.get(mac.lower())
 
-    def start(self):
-        if self._running:
-            return
-
-        self._running = True
-        thread = threading.Thread(target=self._sniff, args=[], daemon=True)
-        thread.start()
-
-    def stop(self):
-        self._running = False
+    def _worker_targets(self):
+        return [self._sniff]
 
     def _sniff(self):
         def pkt_handler(pkt):
