@@ -1,4 +1,4 @@
-<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/logo.jpeg" alt="Evil Limiter" width="500" /></p>
+<p align="center"><img src="https://raw.githubusercontent.com/DavidsonRafaelK/evillimiter/master/docs/images/logo.jpeg" alt="Evil Limiter" /></p>
 
 # Evil Limiter
 
